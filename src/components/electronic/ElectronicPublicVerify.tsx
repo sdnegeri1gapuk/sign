@@ -16,10 +16,7 @@ import {
   Clock,
   RefreshCw,
   Lock,
-  KeyRound,
-  ArrowLeft,
-  ExternalLink,
-  Link as LinkIcon
+  KeyRound
 } from 'lucide-react';
 import { VerifiedDocument } from '../../types';
 import {
@@ -111,17 +108,6 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
     }
   };
 
-  const handleBackToApp = () => {
-    if (onAdminUnlock) {
-      onAdminUnlock();
-    } else {
-      // Clear hash and reload main view
-      if (typeof window !== 'undefined') {
-        window.location.hash = '';
-      }
-    }
-  };
-
   const formatDate = (timestamp?: number) => {
     if (!timestamp) return '-';
     return new Date(timestamp).toLocaleDateString('id-ID', {
@@ -135,42 +121,6 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col select-none">
-      {/* Top Header */}
-      <header className="border-b border-slate-200 bg-white/95 backdrop-blur sticky top-0 z-30 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center shadow-md shadow-emerald-600/20 text-white font-bold shrink-0">
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="font-extrabold text-sm md:text-base text-slate-900 leading-tight tracking-wide">
-                VERIFIKASI DOKUMEN ELEKTRONIK
-              </h1>
-              <p className="text-[11px] text-slate-500">
-                Portal Publik Pengesahan Dokumen Resmi Berbasis QR Code
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Tombol Masuk ke Aplikasi Utama */}
-            <button
-              onClick={handleBackToApp}
-              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 text-xs font-semibold flex items-center gap-1.5 border border-slate-300 transition shadow-sm"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Masuk Aplikasi</span>
-            </button>
-
-            {/* Official Security Badge */}
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
-              <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" />
-              <span>Portal Resmi</span>
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8">
         {/* Loading State */}
@@ -207,26 +157,6 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
 
                 {/* Details Container */}
                 <div className="p-6 sm:p-7 space-y-6">
-                  {/* Google Drive Primary Download Button (If available) */}
-                  {docData.googleDriveUrl && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 via-sky-50 to-emerald-50 border border-indigo-200 shadow-sm space-y-2">
-                      <div className="flex items-center gap-2 text-xs font-bold text-indigo-700">
-                        <LinkIcon className="w-4 h-4 text-indigo-600" />
-                        <span>Dokumen Surat Asli Terhubung Google Drive</span>
-                      </div>
-                      <a
-                        href={docData.googleDriveUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-700 hover:to-emerald-700 text-white text-sm font-bold flex items-center justify-center gap-2.5 shadow-md shadow-indigo-600/20 transition hover:scale-[1.01] active:scale-[0.99]"
-                      >
-                        <Download className="w-5 h-5 text-white" />
-                        <span>Download Dokumen Surat (Google Drive)</span>
-                        <ExternalLink className="w-4 h-4 ml-1 opacity-80" />
-                      </a>
-                    </div>
-                  )}
-
                   {/* Grid Metadata */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Nama Dokumen */}
@@ -311,13 +241,13 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
                     </div>
                   </div>
 
-                  {/* Action Buttons (Copy Link & Download QR) */}
-                  <div className="pt-2 flex flex-wrap gap-3">
+                  {/* Action Buttons (Copy Link, Unduh QR, Unduh Dokumen) */}
+                  <div className="pt-2 flex flex-wrap items-center gap-3">
                     <button
                       onClick={handleCopyLink}
-                      className="flex-1 py-2.5 px-4 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 border border-slate-300 transition shadow-sm"
+                      className="flex-1 min-w-[160px] py-2.5 px-4 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 border border-slate-300 transition shadow-sm"
                     >
-                      {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                      {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
                       <span>{copied ? 'Tautan Disalin!' : 'Salin Tautan Verifikasi'}</span>
                     </button>
 
@@ -327,8 +257,20 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
                         download={`QR_${docData.verificationToken}.png`}
                         className="py-2.5 px-4 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 border border-slate-300 transition shadow-sm"
                       >
-                        <Download className="w-4 h-4" />
+                        <Download className="w-4 h-4 text-slate-600" />
                         <span>Unduh QR</span>
+                      </a>
+                    )}
+
+                    {Boolean(docData.googleDriveUrl && docData.googleDriveUrl.trim()) && (
+                      <a
+                        href={docData.googleDriveUrl!.trim()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2.5 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition hover:shadow"
+                      >
+                        <Download className="w-4 h-4 text-white" />
+                        <span>Unduh Dokumen</span>
                       </a>
                     )}
                   </div>

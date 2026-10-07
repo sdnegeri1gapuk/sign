@@ -470,7 +470,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
         allowDownload: true,
         qrDataUrl,
         verificationUrl,
-        googleDriveUrl: googleDriveUrl.trim() || undefined
+        googleDriveUrl: googleDriveUrl.trim()
       };
 
       await saveVerifiedDocument(newDocRecord);
@@ -734,10 +734,15 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-indigo-950/30 border border-indigo-800/40 space-y-1">
-                    <label className="text-indigo-300 block font-semibold flex items-center gap-1.5">
-                      <LinkIcon className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>9. Link Google Drive Dokumen (Opsional)</span>
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-indigo-300 font-semibold flex items-center gap-1.5 text-xs">
+                        <LinkIcon className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>9. Link Google Drive Dokumen</span>
+                      </label>
+                      <span className="text-[10px] text-emerald-400 font-medium bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40">
+                        Bebas / Opsional
+                      </span>
+                    </div>
                     <input
                       type="url"
                       value={googleDriveUrl}
@@ -746,7 +751,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                       className="w-full bg-slate-900 border border-indigo-700/60 focus:border-indigo-400 rounded-lg px-2.5 py-1.5 text-white font-mono text-[11px]"
                     />
                     <p className="text-[10px] text-slate-400">
-                      Bisa diisi sekarang atau nanti via tombol Edit di menu Dokumen Tersimpan.
+                      ✓ Langsung simpan meski kosong. Link Google Drive bisa ditambahkan belakangan via tombol <strong>Edit</strong> di Dokumen Tersimpan.
                     </p>
                   </div>
                 </div>
@@ -1324,6 +1329,16 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
               <div className="flex justify-between">
                 <span className="text-slate-400">Koordinat QR:</span>
                 <span className="font-mono text-slate-300">X: {qrSettings.x} pt, Y: {qrSettings.y} pt</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Link Google Drive:</span>
+                <span className="text-slate-300 text-[11px]">
+                  {googleDriveUrl.trim() ? (
+                    <span className="text-emerald-400 font-mono">Tersambung ✓</span>
+                  ) : (
+                    <span className="text-slate-400 italic">Boleh kosong (Dapat diisi nanti)</span>
+                  )}
+                </span>
               </div>
             </div>
 

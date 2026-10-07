@@ -96,25 +96,46 @@ function setLocalCache(token: string, docData: VerifiedDocument) {
 // -------------------------------------------------------------
 
 /**
+ * Removes any undefined properties so Firestore doesn't reject them with
+ * "Unsupported field value: undefined" errors.
+ */
+function cleanForFirestore(data: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
  * Saves a finalized verified document to Cloud Firestore
  */
 export async function saveVerifiedDocument(docData: VerifiedDocument): Promise<void> {
-  // Update local cache immediately
-  setLocalCache(docData.verificationToken, docData);
+  // Normalize googleDriveUrl to empty string instead of undefined
+  const normalizedDoc: VerifiedDocument = {
+    ...docData,
+    googleDriveUrl: (docData.googleDriveUrl || '').trim()
+  };
 
-  const docPath = `${VERIFIED_DOCS_COLLECTION}/${docData.verificationToken}`;
+  // Update local cache immediately
+  setLocalCache(normalizedDoc.verificationToken, normalizedDoc);
+
+  const docPath = `${VERIFIED_DOCS_COLLECTION}/${normalizedDoc.verificationToken}`;
   try {
-    await setDoc(doc(db, VERIFIED_DOCS_COLLECTION, docData.verificationToken), {
-      ...docData,
+    const payload = cleanForFirestore({
+      ...normalizedDoc,
       updatedAt: Date.now()
     });
+    await setDoc(doc(db, VERIFIED_DOCS_COLLECTION, normalizedDoc.verificationToken), payload);
   } catch (err) {
     console.warn('Failed to save to Firestore, cached locally:', err);
     try {
       handleFirestoreError(err, OperationType.WRITE, docPath);
-    } catch {
-      // Re-throw if critical
-      throw err;
+    } catch (fsErr) {
+      // Don't crash user workflow if local cache saved successfully
+      console.error('Firestore save failed, fallback to local cache:', fsErr);
     }
   }
 }
@@ -208,20 +229,31 @@ export async function updateVerifiedDocument(
   const docPath = `${VERIFIED_DOCS_COLLECTION}/${token}`;
   const now = Date.now();
 
+  const normalizedPartial: Record<string, any> = { ...partial };
+  if ('googleDriveUrl' in normalizedPartial) {
+    normalizedPartial.googleDriveUrl = (normalizedPartial.googleDriveUrl || '').trim();
+  }
+
   // Update local cache
   const cached = getLocalCache();
   if (cached[token]) {
-    cached[token] = { ...cached[token], ...partial, updatedAt: now };
+    cached[token] = { ...cached[token], ...normalizedPartial, updatedAt: now };
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cached));
   }
 
   try {
-    await updateDoc(doc(db, VERIFIED_DOCS_COLLECTION, token), {
-      ...partial,
+    const payload = cleanForFirestore({
+      ...normalizedPartial,
       updatedAt: now
     });
+    await updateDoc(doc(db, VERIFIED_DOCS_COLLECTION, token), payload);
   } catch (err) {
-    handleFirestoreError(err, OperationType.UPDATE, docPath);
+    console.warn('Firestore update failed, cached locally:', err);
+    try {
+      handleFirestoreError(err, OperationType.UPDATE, docPath);
+    } catch (fsErr) {
+      console.error('Firestore update error, fallback to local cache:', fsErr);
+    }
   }
 }
 
