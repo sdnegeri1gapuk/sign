@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "Signature": {
+      "title": "Signature",
+      "description": "Digital signature template stored in Firestore",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Unique identifier of signature template"
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Name or title label of signature"
+        },
+        "dataUrl": {
+          "type": "string",
+          "maxLength": 950000,
+          "description": "Base64 data URL string of signature image"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Creation timestamp"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["upload", "draw", "type"],
+          "description": "Method of signature creation"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Owner user ID"
+        }
+      },
+      "required": ["id", "title", "dataUrl", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/signatures/{signatureId}": {
+      "schema": {
+        "$ref": "Signature"
+      },
+      "description": "Collection of digital signatures synced across devices"
+    }
+  }
+}

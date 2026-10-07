@@ -1,0 +1,6 @@
+{
+  "name": "SignPDF - Tanda Tangan & Ekspor Multi-Mode",
+  "description": "Aplikasi penandatanganan dokumen PDF profesional dengan pilihan mode ekspor: PDF Asli + Tanda Tangan dan PDF Gambar / Flattened.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
