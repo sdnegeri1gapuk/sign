@@ -1,79 +1,53 @@
-# Panduan Deploy ke GitHub Pages (SignPDF)
+# Solusi Memperbaiki Deploy GitHub Pages (Error Merah / Failed)
 
-Aplikasi **SignPDF** telah disesuaikan 100% untuk berjalan secara online menggunakan **GitHub Pages**.
-
----
-
-## 🛠️ Penyesuaian yang Sudah Dilakukan di Aplikasi
-
-1. **Base URL Relatif (`base: './'`)**:
-   Dikonfigurasi di `vite.config.ts` sehingga seluruh file CSS, Javascript, dan PDF Worker dapat dimuat dengan baik di `https://username.github.io/nama-repo/` maupun custom domain.
-2. **Koneksi Firebase Firestore Cloud**:
-   Konfigurasi Firebase terintegrasi otomatis di sisi client (frontend), sehingga database tanda tangan online tetap sinkron dan dapat diakses dari mana saja tanpa perlu server terpisah.
-3. **Workflow GitHub Actions Otomatis (`.github/workflows/deploy.yml`)**:
-   Setiap kali Anda melakukan push ke branch `main` atau `master`, GitHub akan otomatis meng-compile dan meng-onlinekan aplikasi Anda secara gratis.
+Jika saat push muncul tanda **silang merah (❌ Failed)** pada tab Actions seperti gambar yang Anda kirimkan, berikut penyebab dan cara mengatasinya dalam 1 menit:
 
 ---
 
-## 🚀 Langkah-langkah Mengonlinekan via GitHub Pages
-
-### Langkah 1: Buat Repository di GitHub
-1. Buka [github.com](https://github.com) dan login ke akun Anda.
-2. Klik tombol **New** (atau **+** di pojok kanan atas) untuk membuat repository baru.
-3. Beri nama repository, misalnya: `signpdf` atau `tanda-tangan-pdf`.
-4. Pilih **Public**.
-5. Klik **Create repository**.
+## 🔴 Penyebab Utama:
+Secara default, GitHub mengatur pengaturan Pages ke **"Deploy from a branch"** (Bukan GitHub Actions).
+Akibatnya, GitHub menolak aksi deployment otomatis dan menyebabkan proses berhenti (*Failed*).
 
 ---
 
-### Langkah 2: Upload / Push Kode ke GitHub
-Buka terminal/command prompt di komputer Anda pada folder proyek ini, lalu jalankan perintah:
+## ✅ CARA MEMPERBAIKI (Pilih Cara 1 atau Cara 2)
 
+### Cara 1: Mengaktifkan Izin GitHub Actions di Pengaturan Repo (Rekomendasi)
+
+1. Buka repository GitHub Anda di browser: `https://github.com/sdnegeri1gapuk/[nama-repo]`
+2. Klik tab **Settings** (Pengaturan di pojok kanan atas repo).
+3. Di menu sidebar sebelah kiri, klik menu **Pages**.
+4. Pada bagian **Build and deployment**:
+   - Di bawah tulisan **Source**, klik dropdown yang awalnya bertuliskan *"Deploy from a branch"*.
+   - Ubah dan pilih: **`GitHub Actions`**.
+5. Di sidebar kiri, klik menu **Actions** > **General**:
+   - Scroll ke bawah ke bagian **Workflow permissions**.
+   - Pastikan terpilih: **`Read and write permissions`**.
+   - Klik **Save**.
+6. Sekarang buka tab **Actions** di atas repo:
+   - Klik workflow yang gagal tadi.
+   - Klik tombol **Re-run jobs** > **Re-run all jobs** (atau lakukan git push ulang).
+   - Workflow akan otomatis berjalan dan berubah menjadi **Centang Hijau (Success) ✅**!
+
+---
+
+### Cara 2: Deploy Langsung 1-Klik via Terminal (Tanpa Perlu Setup Actions)
+
+Kami telah menambahkan alat `gh-pages` ke dalam proyek Anda. Anda bisa langsung meng-onlinekan aplikasi langsung dari terminal laptop/komputer Anda:
+
+Jalankan perintah ini di terminal:
 ```bash
-# 1. Inisialisasi git (jika belum)
-git init
-
-# 2. Tambahkan semua file
-git add .
-
-# 3. Commit
-git commit -m "feat: inisialisasi aplikasi signpdf siap deploy ke github pages"
-
-# 4. Ganti branch utama ke main
-git branch -M main
-
-# 5. Hubungkan ke repository GitHub Anda (ganti username dan nama-repo)
-git remote add origin https://github.com/USERNAME_ANDA/NAMA_REPO_ANDA.git
-
-# 6. Push kode ke GitHub
-git push -u origin main
+npm run deploy
 ```
 
----
-
-### Langkah 3: Aktifkan GitHub Actions untuk Pages
-1. Di halaman repository GitHub Anda, buka tab **Settings** (Pengaturan).
-2. Di menu sebelah kiri, klik **Pages**.
-3. Pada bagian **Build and deployment**:
-   - Di dropdown **Source**, pilih: **`GitHub Actions`** (Bukan "Deploy from a branch").
-4. Selesai!
+Perintah di atas akan otomatis meng-compile dan meng-upload aplikasi ke branch `gh-pages`.
+Lalu di **Settings > Pages**, pilih Source: **Deploy from a branch** dan pilih branch: **`gh-pages`**. Selesai!
 
 ---
 
-### Langkah 4: Tunggu Proses Deploy Selesai
-1. Buka tab **Actions** di bagian atas repository GitHub Anda.
-2. Anda akan melihat workflow **Deploy to GitHub Pages** sedang berjalan.
-3. Tunggu sekitar 1–2 menit sampai muncul centang hijau (Success).
-4. Klik workflow tersebut atau kembali ke tab **Settings > Pages** untuk melihat URL website Anda, contohnya:
-   **`https://username.github.io/nama-repo/`**
-
----
-
-### (Opsional) Langkah 5: Daftarkan Domain di Firebase (Jika Menggunakan Google Sign-in)
-Jika Anda menggunakan fitur login Google pada Firebase:
-1. Buka [Firebase Console](https://console.firebase.google.com/).
-2. Pilih project Anda (`gen-lang-client-0620141478`).
-3. Masuk ke **Authentication** > tab **Settings** > **Authorized domains**.
-4. Klik **Add domain**, lalu masukkan: `username.github.io`.
-5. Klik **Save**.
-*(Catatan: Untuk penyimpanan tanda tangan Firestore biasa, fitur sudah langsung aktif tanpa perlu setting tambahan).*
+## 📦 File Workflow yang Sudah Kami Perbaiki:
+File `.github/workflows/deploy.yml` telah kami perbarui dengan perbaikan berikut:
+1. Menghapus ketergantungan cache lockfile yang rentan error.
+2. Menggunakan Node.js 20 LTS yang stabil di runner Ubuntu GitHub.
+3. Menambahkan flag `--legacy-peer-deps --no-audit --no-fund` agar instalasi dependensi tidak pernah gagal.
+4. Menambahkan fallback `404.html` otomatis agar routing SPA tidak error saat halaman di-refresh.
