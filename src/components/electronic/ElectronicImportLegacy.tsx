@@ -1,0 +1,847 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  GraduationCap,
+  Upload,
+  FileText,
+  ShieldCheck,
+  Check,
+  Copy,
+  ExternalLink,
+  ArrowRight,
+  RefreshCw,
+  Link as LinkIcon,
+  HelpCircle,
+  QrCode,
+  AlertCircle,
+  Eye,
+  CheckCircle2,
+  Building2,
+  Calendar,
+  Hash,
+  UserCheck
+} from 'lucide-react';
+import { VerifiedDocument, ElectronicDocFormData } from '../../types';
+import {
+  saveVerifiedDocument,
+  generateUniqueToken,
+  generateVerificationUrl
+} from '../../utils/electronicService';
+import { getAppSettings } from '../../utils/appSettings';
+import { generateSampleSKPPdf } from '../../utils/samplePdf';
+import { pdfjsLib } from '../../utils/pdfWorker';
+
+interface ElectronicImportLegacyProps {
+  onDocumentImported?: (newDoc: VerifiedDocument) => void;
+  onGoToSavedDocs?: () => void;
+  onOpenVerification?: (token: string) => void;
+}
+
+export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
+  onDocumentImported,
+  onGoToSavedDocs,
+  onOpenVerification
+}) => {
+  // Workflow Step: 'upload' | 'form_and_preview' | 'success'
+  const [step, setStep] = useState<'upload' | 'form_and_preview' | 'success'>('upload');
+
+  // PDF File info
+  const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
+  const [fileName, setFileName] = useState<string>('');
+  const [fileSizeStr, setFileSizeStr] = useState<string>('');
+  const [numPages, setNumPages] = useState<number>(1);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Canvas Ref for PDF Page Preview
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Form Data (Auto-synced with AppSettings for Instansi & Kepala Sekolah)
+  const [formData, setFormData] = useState<ElectronicDocFormData>(() => {
+    const settings = getAppSettings();
+    return {
+      documentName: 'Ijazah Kelulusan Siswa',
+      documentType: 'Ijazah',
+      documentNumber: 'DN-01/D-SD/K13/23/0012345',
+      documentDate: '15 Juni 2024',
+      issuer: settings.issuer,
+      signerName: settings.signerName,
+      signerPosition: settings.signerPosition,
+      description: 'Ijazah resmi kelulusan sekolah dengan barcode fisik eksisting.'
+    };
+  });
+
+  // Legacy barcode URL (Link hasil scan barcode pada aplikasi lama)
+  const [legacyBarcodeUrl, setLegacyBarcodeUrl] = useState<string>('');
+  const [customToken, setCustomToken] = useState<string>('');
+  const [googleDriveUrl, setGoogleDriveUrl] = useState<string>('');
+
+  // Saving state
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [savedDoc, setSavedDoc] = useState<VerifiedDocument | null>(null);
+  const [copiedLink, setCopiedLink] = useState<boolean>(false);
+  const [copiedRedirect, setCopiedRedirect] = useState<boolean>(false);
+
+  // Auto-sync settings when modified in settings tab
+  useEffect(() => {
+    const onSettingsChange = () => {
+      const settings = getAppSettings();
+      setFormData((prev) => ({
+        ...prev,
+        issuer: settings.issuer,
+        signerName: settings.signerName,
+        signerPosition: settings.signerPosition
+      }));
+    };
+    window.addEventListener('app_settings_changed', onSettingsChange);
+    return () => window.removeEventListener('app_settings_changed', onSettingsChange);
+  }, []);
+
+  const handleApplySettingsProfile = () => {
+    const settings = getAppSettings();
+    setFormData((prev) => ({
+      ...prev,
+      issuer: settings.issuer,
+      signerName: settings.signerName,
+      signerPosition: settings.signerPosition
+    }));
+  };
+
+  // Attempt to extract a token/code from legacy URL automatically
+  const handleLegacyUrlChange = (val: string) => {
+    setLegacyBarcodeUrl(val);
+    const trimmed = val.trim();
+    if (trimmed && !customToken) {
+      try {
+        // If it's a URL, extract last path segment or query param
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+          const urlObj = new URL(trimmed);
+          const qToken =
+            urlObj.searchParams.get('token') ||
+            urlObj.searchParams.get('v') ||
+            urlObj.searchParams.get('id') ||
+            urlObj.searchParams.get('kode');
+          if (qToken) {
+            setCustomToken(qToken.trim().toUpperCase());
+            return;
+          }
+          const segments = urlObj.pathname.split('/').filter(Boolean);
+          if (segments.length > 0) {
+            const lastSegment = segments[segments.length - 1];
+            if (lastSegment && lastSegment.length >= 4 && lastSegment.length <= 30) {
+              setCustomToken(lastSegment.trim().toUpperCase());
+              return;
+            }
+          }
+        }
+      } catch {
+        // Not a standard URL, continue
+      }
+    }
+  };
+
+  // Handle PDF file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Mohon pilih berkas dengan format PDF (.pdf)');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const bytes = new Uint8Array(ev.target?.result as ArrayBuffer);
+      setPdfBytes(bytes);
+      setFileName(file.name);
+      setFileSizeStr((file.size / (1024 * 1024)).toFixed(2) + ' MB');
+
+      const cleanBaseName = file.name.replace(/\.[^/.]+$/, '');
+      const settings = getAppSettings();
+      setFormData((prev) => ({
+        ...prev,
+        documentName: cleanBaseName.toLowerCase().includes('ijazah')
+          ? cleanBaseName
+          : `Ijazah - ${cleanBaseName}`,
+        issuer: settings.issuer,
+        signerName: settings.signerName,
+        signerPosition: settings.signerPosition
+      }));
+
+      setStep('form_and_preview');
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Load sample diploma PDF
+  const handleLoadSamplePdf = async () => {
+    const settings = getAppSettings();
+    const sample = await generateSampleSKPPdf();
+    setPdfBytes(sample);
+    setFileName('Ijazah_Kelulusan_Siswa_Contoh.pdf');
+    setFileSizeStr('86 KB');
+    setFormData({
+      documentName: 'Ijazah Kelulusan Siswa - Ahmad Fauzi',
+      documentType: 'Ijazah',
+      documentNumber: 'DN-01/D-SD/K13/23/0098765',
+      documentDate: '15 Juni 2024',
+      issuer: settings.issuer,
+      signerName: settings.signerName,
+      signerPosition: settings.signerPosition,
+      description: 'Ijazah resmi kelulusan sekolah dasar tahun ajaran 2023/2024.'
+    });
+    setLegacyBarcodeUrl('https://verifikasi-lama.kemdikbud.sch.id/cek/IJZ-98765');
+    setCustomToken('IJZ-98765');
+    setStep('form_and_preview');
+  };
+
+  // Render current PDF page to canvas preview
+  useEffect(() => {
+    if (!pdfBytes || !canvasRef.current) return;
+    const currentBytes = pdfBytes;
+    let isMounted = true;
+
+    async function renderPage() {
+      try {
+        const loadingTask = pdfjsLib.getDocument({
+          data: currentBytes.slice(0),
+          useSystemFonts: true
+        });
+        const doc = await loadingTask.promise;
+        if (!isMounted) return;
+        setNumPages(doc.numPages);
+
+        const page = await doc.getPage(currentPage);
+        if (!isMounted || !canvasRef.current) return;
+
+        const viewport = page.getViewport({ scale: 0.95 });
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        await page.render({
+          canvasContext: ctx,
+          viewport,
+          canvas
+        }).promise;
+      } catch (err) {
+        console.error('Failed to preview PDF', err);
+      }
+    }
+
+    renderPage();
+    return () => {
+      isMounted = false;
+    };
+  }, [pdfBytes, currentPage]);
+
+  // Handle Save Legacy Document
+  const handleSaveLegacyDocument = async () => {
+    if (!pdfBytes) return;
+
+    setIsSaving(true);
+    try {
+      // Use clean custom token or generate unique token
+      const tokenToUse = customToken.trim()
+        ? customToken.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '')
+        : generateUniqueToken();
+
+      const verificationUrl = generateVerificationUrl(tokenToUse);
+      const docId = `legacy_${tokenToUse}_${Date.now()}`;
+
+      const newRecord: VerifiedDocument = {
+        documentId: docId,
+        verificationToken: tokenToUse,
+        documentName: formData.documentName.trim() || 'Ijazah Kelulusan Siswa',
+        documentType: formData.documentType.trim() || 'Ijazah',
+        documentNumber: formData.documentNumber.trim(),
+        documentDate: formData.documentDate.trim(),
+        issuer: formData.issuer.trim(),
+        signerName: formData.signerName.trim(),
+        signerPosition: formData.signerPosition.trim(),
+        description: formData.description.trim(),
+        originalFileName: fileName,
+        finalFileName: fileName, // File remains 100% original, NO new barcode added
+        qrPage: 1,
+        qrX: 0,
+        qrY: 0,
+        qrWidth: 0,
+        qrHeight: 0,
+        showLabel: false,
+        status: 'VALID',
+        verificationCount: 0,
+        createdAt: Date.now(),
+        allowView: true,
+        allowDownload: true,
+        verificationUrl,
+        googleDriveUrl: googleDriveUrl.trim() || '',
+        legacyBarcodeUrl: legacyBarcodeUrl.trim() || '',
+        isLegacyDocument: true
+      };
+
+      await saveVerifiedDocument(newRecord);
+
+      setSavedDoc(newRecord);
+      setStep('success');
+
+      if (onDocumentImported) {
+        onDocumentImported(newRecord);
+      }
+    } catch (err: any) {
+      console.error('Save error', err);
+      alert('Gagal menyimpan ijazah: ' + (err.message || 'Kesalahan sistem'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (!savedDoc?.verificationUrl) return;
+    navigator.clipboard.writeText(savedDoc.verificationUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopyRedirectSnippet = () => {
+    if (!savedDoc) return;
+    const redirectInfo = `Link Hasil Scan Lama: ${savedDoc.legacyBarcodeUrl || '-'}\nDi-redirect ke Link Verifikasi Baru:\n${savedDoc.verificationUrl}`;
+    navigator.clipboard.writeText(redirectInfo);
+    setCopiedRedirect(true);
+    setTimeout(() => setCopiedRedirect(false), 2000);
+  };
+
+  return (
+    <div className="space-y-6 select-none">
+      {/* Top Banner Notice */}
+      <div className="bg-gradient-to-r from-purple-950/40 via-slate-900 to-indigo-950/40 border border-purple-500/30 rounded-3xl p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 shadow-lg">
+            <GraduationCap className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-[11px] font-bold uppercase tracking-wider mb-1 border border-purple-500/20">
+              Skenario B • Barcode Eksisting
+            </div>
+            <h2 className="text-xl font-bold text-white tracking-tight">
+              Upload Ijazah Lama (Barcode Eksisting)
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5 max-w-xl leading-relaxed">
+              Daftarkan ijazah yang sudah memiliki barcode dari sistem lama. <strong>Tidak perlu menambah barcode baru</strong> pada file PDF. Cukup sesuaikan data ijazah dan masukkan link hasil scan barcode lama agar otomatis terhubung ke sistem verifikasi ini.
+            </p>
+          </div>
+        </div>
+
+        <div className="shrink-0 flex items-center gap-2">
+          <span className="text-[11px] text-purple-300 font-medium bg-purple-950/60 px-3 py-1.5 rounded-xl border border-purple-800/60">
+            ✓ Dokumen Asli Tetap Utuh
+          </span>
+        </div>
+      </div>
+
+      {/* STEP 1: UPLOAD DOKUMEN IJAZAH LAMA */}
+      {step === 'upload' && (
+        <div className="max-w-3xl mx-auto space-y-6">
+          <div className="border-2 border-dashed border-slate-700 hover:border-purple-500 rounded-3xl p-10 text-center transition bg-slate-900/40 relative group flex flex-col items-center justify-center cursor-pointer shadow-xl">
+            <input
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={handleFileUpload}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+            />
+            <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center mb-4 group-hover:scale-105 transition shadow-lg">
+              <Upload className="w-8 h-8" />
+            </div>
+            <h3 className="text-base font-bold text-white">
+              Pilih atau Seret Berkas PDF Ijazah Lama
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Format: PDF (Maks. 25 MB). Dokumen tidak akan diubah atau dicap barcode baru.
+            </p>
+            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-xs text-slate-300 border border-slate-700">
+              <ShieldCheck className="w-4 h-4 text-purple-400" />
+              <span>Mempertahankan Barcode Asli yang Sudah Dicetak</span>
+            </div>
+          </div>
+
+          {/* Quick Sample Option */}
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <span className="text-xs text-slate-500">Atau uji coba langsung alur ini:</span>
+            <button
+              onClick={handleLoadSamplePdf}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-purple-400 border border-slate-700 transition flex items-center gap-1.5"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Gunakan Contoh Berkas Ijazah</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 2: EDIT DATA DOKUMEN & LINK SCAN LAMA */}
+      {step === 'form_and_preview' && (
+        <div className="space-y-6">
+          {/* Top Info Bar */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm text-white">{fileName}</h3>
+                <p className="text-xs text-slate-400">
+                  {fileSizeStr} • {numPages} Halaman • Mode Ijazah Lama (Tanpa Barcode Baru)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="cursor-pointer px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5">
+                <Upload className="w-3.5 h-3.5" />
+                <span>Ganti Berkas</span>
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+
+              <button
+                onClick={handleSaveLegacyDocument}
+                disabled={isSaving}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-purple-600/20 transition flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Menyimpan Ijazah...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Daftarkan Ijazah Ini</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Two-Column Layout: Left Form & Right PDF Preview + Redirect Box */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left: Data Dokumen & Legacy Link Input */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-purple-400" />
+                    <h4 className="font-bold text-sm text-white">DATA IJAZAH LAMA</h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplySettingsProfile}
+                    className="px-2.5 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 text-[10px] font-semibold border border-purple-500/20 transition flex items-center gap-1"
+                    title="Muat nama instansi dan penandatangan dari menu Pengaturan"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Muat Profil Pengaturan</span>
+                  </button>
+                </div>
+
+                <div className="space-y-3.5 text-xs">
+                  {/* Highlight Box: LINK HASIL SCAN BARCODE LAMA */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/40 to-indigo-950/40 border border-purple-500/40 shadow-inner space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-purple-200 font-bold flex items-center gap-1.5 text-xs">
+                        <LinkIcon className="w-4 h-4 text-purple-400" />
+                        <span>Link Hasil Scan Barcode pada Aplikasi Lama</span>
+                      </label>
+                      <span className="text-[10px] text-purple-300 bg-purple-900/60 px-2 py-0.5 rounded border border-purple-700/60 font-mono">
+                        Kunci Pengalihan
+                      </span>
+                    </div>
+
+                    <input
+                      type="url"
+                      value={legacyBarcodeUrl}
+                      onChange={(e) => handleLegacyUrlChange(e.target.value)}
+                      placeholder="Contoh: https://verifikasi-ijazah.kemdikbud.go.id/cek/IJZ-98234"
+                      className="w-full bg-slate-900 border border-purple-700/60 focus:border-purple-400 rounded-xl px-3 py-2.5 text-white font-mono text-[11px] placeholder-slate-500 shadow-inner"
+                    />
+
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      💡 <strong>Cara Penggunaan:</strong> Pindai barcode pada ijazah fisik Anda menggunakan smartphone, lalu salin/tempel tautan yang muncul ke dalam kotak di atas. Sistem kami akan mengenali link ini sehingga saat dicari/dialihkan akan langsung membuka hasil verifikasi di aplikasi baru ini.
+                    </p>
+
+                    {/* Token Identification */}
+                    <div className="pt-1.5 flex items-center gap-2">
+                      <span className="text-slate-400 text-[11px] font-medium">ID / Token Dokumen:</span>
+                      <input
+                        type="text"
+                        value={customToken}
+                        onChange={(e) => setCustomToken(e.target.value.toUpperCase())}
+                        placeholder="Otomatis dari link lama atau buat kode unik"
+                        className="flex-1 bg-slate-950 border border-slate-700 focus:border-purple-500 rounded-lg px-2.5 py-1 text-purple-300 font-mono font-bold text-xs uppercase"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Standard Metadata Fields */}
+                  <div>
+                    <label className="text-slate-400 block mb-1 font-medium">1. Nama Dokumen</label>
+                    <input
+                      type="text"
+                      value={formData.documentName}
+                      onChange={(e) => setFormData({ ...formData, documentName: e.target.value })}
+                      placeholder="Contoh: Ijazah Kelulusan Siswa - Budi Santoso"
+                      className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-slate-400 block mb-1 font-medium">2. Jenis Dokumen</label>
+                      <input
+                        type="text"
+                        value={formData.documentType}
+                        onChange={(e) => setFormData({ ...formData, documentType: e.target.value })}
+                        placeholder="Contoh: Ijazah"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-slate-400 block mb-1 font-medium">3. Nomor Ijazah</label>
+                      <input
+                        type="text"
+                        value={formData.documentNumber}
+                        onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })}
+                        placeholder="Contoh: DN-01/D-SD/K13/23/0012345"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-slate-400 block mb-1 font-medium">4. Tanggal Dokumen</label>
+                      <input
+                        type="text"
+                        value={formData.documentDate}
+                        onChange={(e) => setFormData({ ...formData, documentDate: e.target.value })}
+                        placeholder="15 Juni 2024"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-400 font-medium">5. Instansi / Sekolah</label>
+                        <span className="text-[10px] text-purple-400 font-mono">Pengaturan</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={formData.issuer}
+                        onChange={(e) => setFormData({ ...formData, issuer: e.target.value })}
+                        placeholder="SD Negeri 1 Gapuk"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-400 font-medium">6. Kepala Sekolah / Pejabat</label>
+                        <span className="text-[10px] text-purple-400 font-mono">Pengaturan</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={formData.signerName}
+                        onChange={(e) => setFormData({ ...formData, signerName: e.target.value })}
+                        placeholder="H. Masrun, S.Pd"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition font-medium"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-400 font-medium">7. Jabatan Pejabat</label>
+                        <span className="text-[10px] text-purple-400 font-mono">Pengaturan</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={formData.signerPosition}
+                        onChange={(e) => setFormData({ ...formData, signerPosition: e.target.value })}
+                        placeholder="Kepala Sekolah"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition font-medium"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Google Drive Link */}
+                  <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-slate-300 font-medium flex items-center gap-1.5">
+                        <LinkIcon className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>8. Link Google Drive Dokumen Asli (Opsional)</span>
+                      </label>
+                      <span className="text-[10px] text-emerald-400 font-mono">Boleh Kosong</span>
+                    </div>
+                    <input
+                      type="url"
+                      value={googleDriveUrl}
+                      onChange={(e) => setGoogleDriveUrl(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/.../view (Dapat diisi nanti)"
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-400 rounded-lg px-2.5 py-1.5 text-white font-mono text-[11px]"
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      Jika diisi, pengunjung yang memindai ijazah dapat langsung mengunduh salinan berkas lewat tombol "Unduh Dokumen".
+                    </p>
+                  </div>
+
+                  {/* Description / Student Details */}
+                  <div>
+                    <label className="text-slate-400 block mb-1 font-medium">
+                      9. Keterangan / Rincian Siswa (Opsional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="Catatan NISN, peminatan/jurusan, tahun ajaran, dsb."
+                      className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition resize-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={handleSaveLegacyDocument}
+                    disabled={isSaving}
+                    className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Mendaftarkan Ijazah ke Database...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>SIMPAN & DAFTARKAN IJAZAH KE SISTEM VERIFIKASI</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: PDF Preview & Redirection Helper Info */}
+            <div className="lg:col-span-5 space-y-4">
+              {/* Redirection Simulation Box */}
+              <div className="bg-slate-900/90 border border-purple-800/40 rounded-2xl p-4 shadow-xl space-y-3 text-xs">
+                <div className="flex items-center gap-2 text-purple-300 font-bold">
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Simulasi Pengalihan & Verifikasi</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-[11px]">
+                  <div>
+                    <span className="text-slate-400 block">Link Barcode Lama:</span>
+                    <span className="font-mono text-purple-300 break-all">
+                      {legacyBarcodeUrl.trim() || '(Belum dimasukkan)'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-center text-slate-500 my-1">
+                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                      ↓ Otomatis Mengarah ke Halaman Verifikasi Baru ↓
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-400 block">Status Hasil Scan:</span>
+                    <span className="inline-flex items-center gap-1 text-emerald-400 font-bold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                      DOKUMEN VALID RESMI
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 bg-purple-950/30 p-2.5 rounded-xl border border-purple-800/30 leading-relaxed">
+                  🛡️ <strong>Tanpa Perubahan Fisik:</strong> Ijazah fisik yang sudah tercetak dipegang siswa tetap sah. Siapapun yang memeriksa nomor dokumen atau link hasil scan barcode lama akan menemukan catatan verifikasi resmi di aplikasi baru ini.
+                </div>
+              </div>
+
+              {/* PDF Document Preview Canvas */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+                <div className="flex items-center justify-between text-xs text-slate-400">
+                  <div className="flex items-center gap-1.5 font-medium text-white">
+                    <Eye className="w-4 h-4 text-purple-400" />
+                    <span>Preview Berkas Asli (Hal. {currentPage}/{numPages})</span>
+                  </div>
+                  {numPages > 1 && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={currentPage <= 1}
+                        className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 disabled:opacity-40"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage((p) => Math.min(numPages, p + 1))}
+                        disabled={currentPage >= numPages}
+                        className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 disabled:opacity-40"
+                      >
+                        ›
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-slate-950 rounded-xl p-2 border border-slate-800 flex items-center justify-center max-h-[380px] overflow-auto">
+                  <canvas ref={canvasRef} className="rounded shadow max-w-full max-h-[360px]" />
+                </div>
+                <p className="text-[10px] text-center text-slate-500">
+                  Dokumen asli ini tidak ditempeli barcode tambahan.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 3: SUCCESS & REDIRECT GUIDE */}
+      {step === 'success' && savedDoc && (
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="bg-slate-900/90 border border-purple-500/40 rounded-3xl p-8 shadow-2xl text-center space-y-6">
+            <div className="w-16 h-16 rounded-2xl bg-purple-500/20 border border-purple-500/30 text-purple-400 flex items-center justify-center mx-auto shadow-lg">
+              <Check className="w-8 h-8" />
+            </div>
+
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 text-xs font-bold uppercase tracking-wider mb-2 border border-purple-500/20">
+                PENDAFTARAN IJAZAH BERHASIL
+              </div>
+              <h2 className="text-2xl font-bold text-white tracking-tight">
+                ✓ IJAZAH RESMI TERDAFTAR DI SISTEM VERIFIKASI
+              </h2>
+              <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                Ijazah lama Anda kini telah terdaftar sebagai <strong>VALID</strong> di database verifikasi baru tanpa perlu mengubah fisik atau mencap barcode baru.
+              </p>
+            </div>
+
+            {/* Document Details Card */}
+            <div className="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 text-left grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div>
+                <span className="text-slate-400 block mb-0.5">Nama Dokumen:</span>
+                <span className="font-semibold text-white text-sm">{savedDoc.documentName}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block mb-0.5">Nomor Ijazah:</span>
+                <span className="font-mono font-bold text-purple-300 text-sm">
+                  {savedDoc.documentNumber || '-'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block mb-0.5">ID / Token Verifikasi:</span>
+                <span className="font-mono font-bold text-emerald-400 text-sm tracking-wider">
+                  {savedDoc.verificationToken}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block mb-0.5">Status Dokumen:</span>
+                <span className="inline-flex items-center gap-1 text-emerald-400 font-bold bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  VALID
+                </span>
+              </div>
+            </div>
+
+            {/* Redirection Mapping Box */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-purple-800/40 text-left space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-purple-300 font-bold flex items-center gap-1.5">
+                  <LinkIcon className="w-4 h-4 text-purple-400" />
+                  <span>Pemetaan Tautan Pengalihan (Redirect):</span>
+                </span>
+                <button
+                  onClick={handleCopyRedirectSnippet}
+                  className="text-[11px] text-purple-400 hover:text-purple-300 flex items-center gap-1 font-medium"
+                >
+                  {copiedRedirect ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedRedirect ? 'Disalin!' : 'Salin Info'}</span>
+                </button>
+              </div>
+
+              {savedDoc.legacyBarcodeUrl && (
+                <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                  <span className="text-slate-500 block text-[10px]">Tautan Hasil Scan Barcode Lama:</span>
+                  <span className="font-mono text-slate-300 break-all text-[11px]">
+                    {savedDoc.legacyBarcodeUrl}
+                  </span>
+                </div>
+              )}
+
+              <div className="p-2.5 rounded-lg bg-slate-900 border border-purple-700/50">
+                <span className="text-purple-400 block text-[10px]">Tautan Verifikasi Resmi di Aplikasi Baru Ini:</span>
+                <span className="font-mono text-emerald-400 font-bold break-all text-[11px]">
+                  {savedDoc.verificationUrl}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={handleCopyLink}
+                className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center justify-center gap-2"
+              >
+                {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedLink ? 'Tautan Disalin!' : 'Salin Link Verifikasi Baru'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (onOpenVerification) {
+                    onOpenVerification(savedDoc.verificationToken);
+                  } else {
+                    window.open(savedDoc.verificationUrl, '_blank');
+                  }
+                }}
+                className="py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/20 transition flex items-center justify-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>Buka Halaman Verifikasi</span>
+              </button>
+            </div>
+
+            <div className="pt-4 border-t border-slate-800 flex justify-center gap-4">
+              <button
+                onClick={() => {
+                  setStep('upload');
+                  setPdfBytes(null);
+                  setLegacyBarcodeUrl('');
+                  setCustomToken('');
+                  setSavedDoc(null);
+                }}
+                className="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5"
+              >
+                <span>Upload Ijazah Lainnya</span>
+              </button>
+              {onGoToSavedDocs && (
+                <button
+                  onClick={onGoToSavedDocs}
+                  className="text-xs text-purple-400 hover:text-purple-300 transition flex items-center gap-1.5"
+                >
+                  <span>Lihat Dokumen Tersimpan</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

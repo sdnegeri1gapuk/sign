@@ -44,9 +44,15 @@ export default function App() {
         }
       }
 
-      // 2. Check Search query params: e.g. ?v=8F7A92KX31 or ?verifikasi=8F7A92KX31
+      // 2. Check Search query params: e.g. ?v=..., ?verifikasi=..., ?barcode=..., ?legacy=...
       const params = new URLSearchParams(window.location.search);
-      const queryToken = params.get('v') || params.get('verifikasi');
+      const queryToken =
+        params.get('v') ||
+        params.get('verifikasi') ||
+        params.get('barcode') ||
+        params.get('token') ||
+        params.get('id') ||
+        params.get('legacy');
       if (queryToken && queryToken.trim()) {
         setPublicVerifyToken(queryToken.trim().toUpperCase());
         return;

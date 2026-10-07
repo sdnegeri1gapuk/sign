@@ -141,11 +141,12 @@ export async function saveVerifiedDocument(docData: VerifiedDocument): Promise<v
 }
 
 /**
- * Fetch a verified document by verificationToken (public query, no auth needed)
+ * Fetch a verified document by verificationToken or legacyBarcodeUrl (public query, no auth needed)
  */
 export async function getVerifiedDocumentByToken(token: string): Promise<VerifiedDocument | null> {
-  const cleanToken = token.trim().toUpperCase();
-  if (!cleanToken) return null;
+  const cleanRaw = token.trim();
+  if (!cleanRaw) return null;
+  const cleanToken = cleanRaw.toUpperCase();
 
   try {
     const docRef = doc(db, VERIFIED_DOCS_COLLECTION, cleanToken);
@@ -159,10 +160,39 @@ export async function getVerifiedDocumentByToken(token: string): Promise<Verifie
     console.warn('Firestore fetch failed, checking local cache:', err);
   }
 
-  // Fallback to local cache if offline or direct lookup
+  // Fallback to local cache if direct token lookup matches
   const cached = getLocalCache();
   if (cached[cleanToken]) {
     return cached[cleanToken];
+  }
+
+  // Look across all cached and Firestore documents for matching legacyBarcodeUrl or token
+  try {
+    const allDocs = await getAllVerifiedDocuments();
+    const matched = allDocs.find((docItem) => {
+      if (docItem.verificationToken.toUpperCase() === cleanToken) return true;
+      if (docItem.legacyBarcodeUrl) {
+        const legacy = docItem.legacyBarcodeUrl.trim();
+        if (legacy === cleanRaw) return true;
+        if (legacy.toLowerCase() === cleanRaw.toLowerCase()) return true;
+        // If query is contained in legacy URL or legacy URL is contained in query
+        if (legacy.includes(cleanRaw) || cleanRaw.includes(legacy)) return true;
+        // Check if query token is in the legacy URL pathname
+        try {
+          const parsed = new URL(legacy);
+          if (parsed.pathname.includes(cleanRaw) || parsed.search.includes(cleanRaw)) return true;
+        } catch {
+          // not a full url
+        }
+      }
+      return false;
+    });
+
+    if (matched) {
+      return matched;
+    }
+  } catch (e) {
+    console.warn('Error during legacy barcode search:', e);
   }
 
   return null;

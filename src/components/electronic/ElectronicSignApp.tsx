@@ -6,7 +6,8 @@ import {
   ShieldCheck,
   Settings,
   RefreshCw,
-  QrCode
+  QrCode,
+  GraduationCap
 } from 'lucide-react';
 import { VerifiedDocument, ElectronicSubMenu } from '../../types';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../../utils/electronicService';
 import { ElectronicDashboard } from './ElectronicDashboard';
 import { ElectronicCreateDoc } from './ElectronicCreateDoc';
+import { ElectronicImportLegacy } from './ElectronicImportLegacy';
 import { ElectronicSavedDocs } from './ElectronicSavedDocs';
 import { ElectronicPublicVerify } from './ElectronicPublicVerify';
 import { ElectronicSettings } from './ElectronicSettings';
@@ -82,7 +84,7 @@ export const ElectronicSignApp: React.FC<ElectronicSignAppProps> = ({
             <span>Dashboard</span>
           </button>
 
-          {/* Buat Dokumen */}
+          {/* Buat Dokumen (QR Baru) */}
           <button
             onClick={() => setActiveSubMenu('create')}
             className={`px-3.5 py-2 rounded-xl font-medium transition flex items-center gap-2 ${
@@ -93,6 +95,19 @@ export const ElectronicSignApp: React.FC<ElectronicSignAppProps> = ({
           >
             <FilePlus className="w-4 h-4" />
             <span>Buat Dokumen</span>
+          </button>
+
+          {/* Upload Ijazah Lama (Barcode Eksisting / Skenario B) */}
+          <button
+            onClick={() => setActiveSubMenu('import_legacy')}
+            className={`px-3.5 py-2 rounded-xl font-medium transition flex items-center gap-2 ${
+              activeSubMenu === 'import_legacy'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25'
+                : 'text-purple-300 hover:text-white hover:bg-purple-950/40 border border-purple-800/30'
+            }`}
+          >
+            <GraduationCap className="w-4 h-4" />
+            <span>Upload Ijazah Lama</span>
           </button>
 
           {/* Dokumen Tersimpan */}
@@ -158,6 +173,14 @@ export const ElectronicSignApp: React.FC<ElectronicSignAppProps> = ({
         {activeSubMenu === 'create' && (
           <ElectronicCreateDoc
             onDocumentCreated={handleDocumentCreated}
+            onGoToSavedDocs={() => setActiveSubMenu('saved')}
+            onOpenVerification={onOpenVerificationPage}
+          />
+        )}
+
+        {activeSubMenu === 'import_legacy' && (
+          <ElectronicImportLegacy
+            onDocumentImported={handleDocumentCreated}
             onGoToSavedDocs={() => setActiveSubMenu('saved')}
             onOpenVerification={onOpenVerificationPage}
           />

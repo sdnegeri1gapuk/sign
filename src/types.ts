@@ -74,6 +74,8 @@ export interface VerifiedDocument {
   qrDataUrl?: string;
   verificationUrl?: string;
   googleDriveUrl?: string;
+  legacyBarcodeUrl?: string; // Link hasil scan barcode lama
+  isLegacyDocument?: boolean; // Penanda dokumen impor ijazah/arsip lama
 }
 
 export interface VerificationLog {
@@ -106,4 +108,4 @@ export interface QrPlacementSettings {
 }
 
 export type MainNavMenu = 'manual' | 'electronic';
-export type ElectronicSubMenu = 'dashboard' | 'create' | 'saved' | 'verify' | 'settings';
+export type ElectronicSubMenu = 'dashboard' | 'create' | 'import_legacy' | 'saved' | 'verify' | 'settings';

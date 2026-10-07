@@ -62,6 +62,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
     signerName: string;
     signerPosition: string;
     googleDriveUrl: string;
+    legacyBarcodeUrl: string;
     description: string;
   }>({
     documentName: '',
@@ -72,6 +73,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
     signerName: '',
     signerPosition: '',
     googleDriveUrl: '',
+    legacyBarcodeUrl: '',
     description: ''
   });
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
@@ -93,7 +95,8 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
         doc.documentNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         doc.verificationToken.toLowerCase().includes(searchTerm.toLowerCase()) ||
         doc.issuer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (doc.googleDriveUrl && doc.googleDriveUrl.toLowerCase().includes(searchTerm.toLowerCase()));
+        (doc.googleDriveUrl && doc.googleDriveUrl.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (doc.legacyBarcodeUrl && doc.legacyBarcodeUrl.toLowerCase().includes(searchTerm.toLowerCase()));
 
       if (statusFilter === 'all') return matchSearch;
       return matchSearch && doc.status === statusFilter;
@@ -118,6 +121,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
       signerName: doc.signerName || '',
       signerPosition: doc.signerPosition || '',
       googleDriveUrl: doc.googleDriveUrl || '',
+      legacyBarcodeUrl: doc.legacyBarcodeUrl || '',
       description: doc.description || ''
     });
   };
@@ -136,6 +140,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
         signerName: editFormData.signerName.trim(),
         signerPosition: editFormData.signerPosition.trim(),
         googleDriveUrl: editFormData.googleDriveUrl.trim(),
+        legacyBarcodeUrl: editFormData.legacyBarcodeUrl.trim(),
         description: editFormData.description.trim()
       });
       setEditingDoc(null);
@@ -268,7 +273,14 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                     <td className="py-3.5 px-4 text-slate-400 font-mono">{idx + 1}</td>
 
                     <td className="py-3.5 px-4 font-medium text-white max-w-[200px]">
-                      <div className="truncate font-semibold">{doc.documentName}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate font-semibold">{doc.documentName}</span>
+                        {doc.isLegacyDocument && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/30 font-medium shrink-0">
+                            Ijazah Lama
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[11px] text-slate-400 truncate">{doc.issuer}</div>
                     </td>
 
@@ -423,6 +435,24 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                 />
                 <p className="text-[10px] text-indigo-300/80 leading-relaxed">
                   💡 Masukkan link Google Drive file yang sudah ditandatangani. Saat barcode/QR code dipindai oleh orang lain, tombol unduh file surat ini akan langsung muncul di halaman verifikasi!
+                </p>
+              </div>
+
+              {/* Legacy Barcode URL Input */}
+              <div className="p-3.5 rounded-xl bg-purple-950/30 border border-purple-800/50 space-y-1.5">
+                <label className="text-purple-200 block font-bold flex items-center gap-1.5">
+                  <LinkIcon className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Link Hasil Scan Barcode Lama (Pengalihan / Redirect)</span>
+                </label>
+                <input
+                  type="url"
+                  value={editFormData.legacyBarcodeUrl}
+                  onChange={(e) => setEditFormData({ ...editFormData, legacyBarcodeUrl: e.target.value })}
+                  placeholder="https://verifikasi-lama.../cek/..."
+                  className="w-full bg-slate-900 border border-purple-700/60 focus:border-purple-400 rounded-lg px-3 py-2 text-white placeholder-slate-500 font-mono text-[11px]"
+                />
+                <p className="text-[10px] text-purple-300/80 leading-relaxed">
+                  💡 Link ini digunakan untuk mengarahkan pencarian barcode fisik lama ke hasil verifikasi dokumen ini.
                 </p>
               </div>
 
@@ -608,6 +638,20 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                   <span className="text-slate-500 italic">Belum diatur</span>
                 )}
               </div>
+              {selectedDoc.legacyBarcodeUrl && (
+                <div className="flex justify-between border-b border-slate-800/80 py-1.5">
+                  <span className="text-slate-400">Link Scan Barcode Lama:</span>
+                  <a
+                    href={selectedDoc.legacyBarcodeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-purple-400 hover:underline max-w-[200px] truncate font-mono text-[11px]"
+                    title={selectedDoc.legacyBarcodeUrl}
+                  >
+                    {selectedDoc.legacyBarcodeUrl}
+                  </a>
+                </div>
+              )}
               <div className="flex justify-between border-b border-slate-800/80 py-1.5">
                 <span className="text-slate-400">Status Saat Ini:</span>
                 <span className={selectedDoc.status === 'VALID' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
