@@ -36,3 +36,73 @@ export interface SignatureTemplate {
   type?: 'draw' | 'type' | 'upload';
   fileSize?: number;
 }
+
+// -------------------------------------------------------------
+// Electronic Document Verification Types (Verifikasi Dokumen Elektronik)
+// -------------------------------------------------------------
+
+export type DocumentStatus = 'VALID' | 'DICABUT' | 'TIDAK VALID';
+
+export interface VerifiedDocument {
+  documentId: string;
+  verificationToken: string;
+  documentName: string;
+  documentType: string;
+  documentNumber: string;
+  documentDate: string;
+  issuer: string;
+  signerName: string;
+  signerPosition: string;
+  description?: string;
+  originalFileName: string;
+  finalFileName: string;
+  qrPage: number;
+  qrX: number;
+  qrY: number;
+  qrWidth: number;
+  qrHeight: number;
+  showLabel?: boolean;
+  labelText?: string;
+  status: DocumentStatus;
+  verificationCount: number;
+  createdAt: number;
+  updatedAt?: number;
+  allowView?: boolean;
+  allowDownload?: boolean;
+  revokedAt?: number | null;
+  revokedReason?: string;
+  qrDataUrl?: string;
+  verificationUrl?: string;
+}
+
+export interface VerificationLog {
+  id: string;
+  verificationToken: string;
+  documentId: string;
+  timestamp: number;
+  userAgent?: string;
+}
+
+export interface ElectronicDocFormData {
+  documentName: string;
+  documentType: string;
+  documentNumber: string;
+  documentDate: string;
+  issuer: string;
+  signerName: string;
+  signerPosition: string;
+  description: string;
+}
+
+export interface QrPlacementSettings {
+  pageNumber: number;
+  x: number; // in PDF points
+  y: number; // in PDF points
+  width: number; // in PDF points (square)
+  height: number; // in PDF points
+  showLabel: boolean;
+  labelText: string;
+}
+
+export type MainNavMenu = 'manual' | 'electronic';
+export type ElectronicSubMenu = 'dashboard' | 'create' | 'saved' | 'verify' | 'settings';

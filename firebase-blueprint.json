@@ -36,6 +36,175 @@
         }
       },
       "required": ["id", "title", "dataUrl", "createdAt"]
+    },
+    "VerifiedDocument": {
+      "title": "VerifiedDocument",
+      "description": "Document record with electronic verification QR code",
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Unique identifier of document"
+        },
+        "verificationToken": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Public verification token"
+        },
+        "documentName": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Title of the document"
+        },
+        "documentType": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Type/category of document"
+        },
+        "documentNumber": {
+          "type": "string",
+          "maxLength": 150,
+          "description": "Official document number"
+        },
+        "documentDate": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Issue date of the document"
+        },
+        "issuer": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Issuing institution or organization"
+        },
+        "signerName": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Name of authorized signatory"
+        },
+        "signerPosition": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Position/title of signatory"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Additional notes or description"
+        },
+        "originalFileName": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Original uploaded PDF file name"
+        },
+        "finalFileName": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Final stamped PDF file name"
+        },
+        "qrPage": {
+          "type": "number",
+          "description": "Page where QR code is placed"
+        },
+        "qrX": {
+          "type": "number",
+          "description": "X position in PDF coordinates"
+        },
+        "qrY": {
+          "type": "number",
+          "description": "Y position in PDF coordinates"
+        },
+        "qrWidth": {
+          "type": "number",
+          "description": "Width in PDF points"
+        },
+        "qrHeight": {
+          "type": "number",
+          "description": "Height in PDF points"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["VALID", "DICABUT", "TIDAK VALID"],
+          "description": "Document verification validity status"
+        },
+        "verificationCount": {
+          "type": "number",
+          "description": "Total times scanned and verified"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Creation timestamp in ms"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last updated timestamp in ms"
+        },
+        "allowView": {
+          "type": "boolean",
+          "description": "Whether public can view document preview"
+        },
+        "allowDownload": {
+          "type": "boolean",
+          "description": "Whether public can download document"
+        },
+        "revokedAt": {
+          "type": "number",
+          "description": "Revocation timestamp in ms"
+        },
+        "revokedReason": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Reason document was revoked"
+        },
+        "qrDataUrl": {
+          "type": "string",
+          "maxLength": 500000,
+          "description": "Base64 data URL preview of generated QR code"
+        }
+      },
+      "required": [
+        "documentId",
+        "verificationToken",
+        "documentName",
+        "documentType",
+        "documentNumber",
+        "issuer",
+        "signerName",
+        "status",
+        "createdAt"
+      ]
+    },
+    "VerificationLog": {
+      "title": "VerificationLog",
+      "description": "Audit trail log when a document QR code is scanned or verified",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Log entry identifier"
+        },
+        "verificationToken": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Scanned verification token"
+        },
+        "documentId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Associated document ID"
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Scan timestamp in ms"
+        },
+        "userAgent": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Scanner browser user agent info"
+        }
+      },
+      "required": ["id", "verificationToken", "timestamp"]
     }
   },
   "firestore": {
@@ -44,6 +213,18 @@
         "$ref": "Signature"
       },
       "description": "Collection of digital signatures synced across devices"
+    },
+    "/verified_documents/{verificationToken}": {
+      "schema": {
+        "$ref": "VerifiedDocument"
+      },
+      "description": "Collection of finalized electronically verified documents keyed by verificationToken"
+    },
+    "/verification_logs/{logId}": {
+      "schema": {
+        "$ref": "VerificationLog"
+      },
+      "description": "Audit logs of verification scans"
     }
   }
 }
