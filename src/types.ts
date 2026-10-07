@@ -73,6 +73,7 @@ export interface VerifiedDocument {
   revokedReason?: string;
   qrDataUrl?: string;
   verificationUrl?: string;
+  googleDriveUrl?: string;
 }
 
 export interface VerificationLog {

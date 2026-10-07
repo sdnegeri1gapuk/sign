@@ -6,6 +6,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   increment,
   onSnapshot
 } from 'firebase/firestore';
@@ -194,6 +195,53 @@ export async function revokeDocument(token: string, reason = 'Dicabut oleh insta
     });
   } catch (err) {
     handleFirestoreError(err, OperationType.UPDATE, docPath);
+  }
+}
+
+/**
+ * Update document details, especially Google Drive URL and metadata
+ */
+export async function updateVerifiedDocument(
+  token: string,
+  partial: Partial<VerifiedDocument>
+): Promise<void> {
+  const docPath = `${VERIFIED_DOCS_COLLECTION}/${token}`;
+  const now = Date.now();
+
+  // Update local cache
+  const cached = getLocalCache();
+  if (cached[token]) {
+    cached[token] = { ...cached[token], ...partial, updatedAt: now };
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cached));
+  }
+
+  try {
+    await updateDoc(doc(db, VERIFIED_DOCS_COLLECTION, token), {
+      ...partial,
+      updatedAt: now
+    });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, docPath);
+  }
+}
+
+/**
+ * Permanently delete a verified document from Firestore and local cache
+ */
+export async function deleteVerifiedDocument(token: string): Promise<void> {
+  const docPath = `${VERIFIED_DOCS_COLLECTION}/${token}`;
+
+  // Remove from local cache
+  const cached = getLocalCache();
+  if (cached[token]) {
+    delete cached[token];
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cached));
+  }
+
+  try {
+    await deleteDoc(doc(db, VERIFIED_DOCS_COLLECTION, token));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, docPath);
   }
 }
 

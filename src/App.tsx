@@ -8,18 +8,23 @@ import {
   PenTool,
   ShieldCheck,
   QrCode,
-  FileSignature,
-  FileText,
-  ExternalLink,
-  ChevronRight,
-  Database
+  LogOut,
+  UserCheck,
+  ExternalLink
 } from 'lucide-react';
 import { MainNavMenu } from './types';
 import { ManualSignApp } from './components/manual/ManualSignApp';
 import { ElectronicSignApp } from './components/electronic/ElectronicSignApp';
 import { ElectronicPublicVerify } from './components/electronic/ElectronicPublicVerify';
+import { LoginPage } from './components/auth/LoginPage';
+import {
+  isUserLoggedIn,
+  logoutUser,
+  getLoggedInUserDisplay
+} from './utils/adminAuth';
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(isUserLoggedIn());
   const [activeMainMenu, setActiveMainMenu] = useState<MainNavMenu>('electronic');
   const [publicVerifyToken, setPublicVerifyToken] = useState<string | null>(null);
 
@@ -53,14 +58,18 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleUrlRoute);
   }, []);
 
-  // If a verification token is opened directly via URL or QR scan
-  if (publicVerifyToken) {
+  const handleLogout = () => {
+    logoutUser();
+    setIsAuthenticated(false);
+  };
+
+  // 1. If someone scanned QR code on paper or opened verification URL
+  if (publicVerifyToken && publicVerifyToken !== 'SEARCH') {
     return (
       <ElectronicPublicVerify
         initialToken={publicVerifyToken}
         onAdminUnlock={() => {
           setPublicVerifyToken(null);
-          // Clean hash without reloading
           if (window.location.hash) {
             window.history.pushState(null, '', window.location.pathname);
           }
@@ -69,8 +78,32 @@ export default function App() {
     );
   }
 
+  // 2. If opened public search from login page
+  if (publicVerifyToken === 'SEARCH') {
+    return (
+      <ElectronicPublicVerify
+        initialToken=""
+        onAdminUnlock={() => setPublicVerifyToken(null)}
+      />
+    );
+  }
+
+  // 3. SECURITY GATE: If not logged in, ALWAYS show Login Page
+  // Even if someone tampers with the URL/hash, they CANNOT enter without login!
+  if (!isAuthenticated) {
+    return (
+      <LoginPage
+        onLoginSuccess={() => setIsAuthenticated(true)}
+        onOpenPublicVerify={() => setPublicVerifyToken('SEARCH')}
+      />
+    );
+  }
+
+  // 4. Authenticated Administrator Workspace
+  const loggedInUser = getLoggedInUserDisplay();
+
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 font-sans text-slate-100 select-none">
       {/* GLOBAL TOP HEADER */}
       <header className="h-16 bg-slate-900 border-b border-slate-800 px-4 sm:px-6 flex items-center justify-between z-30 shrink-0 shadow-md">
         {/* Left: Brand Identity */}
@@ -88,7 +121,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Center / Right: 2 Main Navigation Menus */}
+        {/* Center: 2 Main Navigation Menus */}
         <div className="flex items-center gap-2">
           <nav className="flex items-center bg-slate-950/80 p-1 rounded-xl border border-slate-800 text-xs">
             {/* Menu 1: Tanda Tangan Manual */}
@@ -117,6 +150,23 @@ export default function App() {
               <span>Tanda Tangan Elektronik</span>
             </button>
           </nav>
+        </div>
+
+        {/* Right: User Status & Logout Button */}
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-800/80 border border-slate-700/80 text-xs text-slate-300">
+            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="font-medium max-w-[120px] truncate">{loggedInUser}</span>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-white border border-red-800/50 text-xs font-semibold flex items-center gap-1.5 transition shadow"
+            title="Keluar dari akun pengelola"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Keluar</span>
+          </button>
         </div>
       </header>
 

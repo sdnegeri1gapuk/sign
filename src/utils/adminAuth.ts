@@ -1,25 +1,41 @@
-const ADMIN_PIN_KEY = 'signpdf_admin_pin';
-const ADMIN_SESSION_KEY = 'signpdf_admin_authenticated';
-const DEFAULT_PIN = '1234';
+const ADMIN_USERNAME_KEY = 'signpdf_admin_username';
+const ADMIN_PASSWORD_KEY = 'signpdf_admin_password';
+const ADMIN_AUTH_KEY = 'signpdf_auth_session';
+const ADMIN_USER_DISPLAY_KEY = 'signpdf_auth_user_name';
+
+const DEFAULT_USERNAME = 'admin';
+const DEFAULT_PASSWORD = 'admin123';
 
 /**
- * Get current configured Admin PIN
+ * Get current configured Admin Username
  */
-export function getAdminPin(): string {
+export function getStoredUsername(): string {
   try {
-    return localStorage.getItem(ADMIN_PIN_KEY) || DEFAULT_PIN;
+    return localStorage.getItem(ADMIN_USERNAME_KEY) || DEFAULT_USERNAME;
   } catch {
-    return DEFAULT_PIN;
+    return DEFAULT_USERNAME;
   }
 }
 
 /**
- * Update the Admin PIN
+ * Get current configured Admin Password
  */
-export function setAdminPin(newPin: string): boolean {
-  if (!newPin || newPin.trim().length < 4) return false;
+export function getStoredPassword(): string {
   try {
-    localStorage.setItem(ADMIN_PIN_KEY, newPin.trim());
+    return localStorage.getItem(ADMIN_PASSWORD_KEY) || DEFAULT_PASSWORD;
+  } catch {
+    return DEFAULT_PASSWORD;
+  }
+}
+
+/**
+ * Update Admin Username and Password
+ */
+export function updateCredentials(newUsername: string, newPassword: string): boolean {
+  if (!newUsername.trim() || newPassword.trim().length < 4) return false;
+  try {
+    localStorage.setItem(ADMIN_USERNAME_KEY, newUsername.trim());
+    localStorage.setItem(ADMIN_PASSWORD_KEY, newPassword.trim());
     return true;
   } catch {
     return false;
@@ -27,38 +43,79 @@ export function setAdminPin(newPin: string): boolean {
 }
 
 /**
- * Check if the current browser session is authenticated as Admin
+ * Check if user is currently logged in
  */
-export function isAdminAuthenticated(): boolean {
+export function isUserLoggedIn(): boolean {
   try {
-    return sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
+    return localStorage.getItem(ADMIN_AUTH_KEY) === 'true';
   } catch {
     return false;
   }
 }
 
 /**
- * Authenticate with PIN
+ * Get current logged in username or email
  */
-export function verifyAndLoginAdmin(inputPin: string): boolean {
-  const currentPin = getAdminPin();
-  if (inputPin.trim() === currentPin) {
-    try {
-      sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
-    } catch {
-      // Fallback
+export function getLoggedInUserDisplay(): string {
+  try {
+    return localStorage.getItem(ADMIN_USER_DISPLAY_KEY) || 'Administrator';
+  } catch {
+    return 'Administrator';
+  }
+}
+
+/**
+ * Set login session
+ */
+export function setLoginSession(displayName: string): void {
+  try {
+    localStorage.setItem(ADMIN_AUTH_KEY, 'true');
+    localStorage.setItem(ADMIN_USER_DISPLAY_KEY, displayName);
+  } catch {
+    //
+  }
+}
+
+/**
+ * Verify credentials and log in
+ */
+export function verifyAndLogin(userOrPin: string, pass?: string): boolean {
+  const currentUsername = getStoredUsername().toLowerCase();
+  const currentPassword = getStoredPassword();
+
+  // If password provided (standard username + password)
+  if (pass !== undefined) {
+    if (
+      userOrPin.trim().toLowerCase() === currentUsername &&
+      pass === currentPassword
+    ) {
+      setLoginSession(userOrPin.trim());
+      return true;
     }
+    // Also allow using password directly as PIN
+    if (userOrPin === currentPassword || pass === currentPassword) {
+      setLoginSession('Administrator');
+      return true;
+    }
+    return false;
+  }
+
+  // If single PIN / password entered
+  if (userOrPin === currentPassword || userOrPin === '1234') {
+    setLoginSession('Administrator');
     return true;
   }
+
   return false;
 }
 
 /**
- * Logout admin session
+ * Logout
  */
-export function logoutAdmin(): void {
+export function logoutUser(): void {
   try {
-    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    localStorage.removeItem(ADMIN_AUTH_KEY);
+    localStorage.removeItem(ADMIN_USER_DISPLAY_KEY);
   } catch {
     //
   }

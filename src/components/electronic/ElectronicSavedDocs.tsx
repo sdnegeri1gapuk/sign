@@ -17,10 +17,19 @@ import {
   Building2,
   Calendar,
   Hash,
-  UserCheck
+  UserCheck,
+  Pencil,
+  Trash2,
+  Globe,
+  Save,
+  Link as LinkIcon
 } from 'lucide-react';
 import { VerifiedDocument, DocumentStatus } from '../../types';
-import { revokeDocument } from '../../utils/electronicService';
+import {
+  revokeDocument,
+  updateVerifiedDocument,
+  deleteVerifiedDocument
+} from '../../utils/electronicService';
 
 interface ElectronicSavedDocsProps {
   documents: VerifiedDocument[];
@@ -42,6 +51,35 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
   // Selected document for Detail Modal
   const [selectedDoc, setSelectedDoc] = useState<VerifiedDocument | null>(null);
 
+  // Edit Modal state
+  const [editingDoc, setEditingDoc] = useState<VerifiedDocument | null>(null);
+  const [editFormData, setEditFormData] = useState<{
+    documentName: string;
+    documentNumber: string;
+    documentType: string;
+    documentDate: string;
+    issuer: string;
+    signerName: string;
+    signerPosition: string;
+    googleDriveUrl: string;
+    description: string;
+  }>({
+    documentName: '',
+    documentNumber: '',
+    documentType: '',
+    documentDate: '',
+    issuer: '',
+    signerName: '',
+    signerPosition: '',
+    googleDriveUrl: '',
+    description: ''
+  });
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+
+  // Delete Modal state
+  const [deletingDoc, setDeletingDoc] = useState<VerifiedDocument | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
   // Revoke Modal state
   const [revokingDoc, setRevokingDoc] = useState<VerifiedDocument | null>(null);
   const [revokeReason, setRevokeReason] = useState<string>('Dokumen ditarik oleh instansi penerbit');
@@ -54,7 +92,8 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
         doc.documentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         doc.documentNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
         doc.verificationToken.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        doc.issuer.toLowerCase().includes(searchTerm.toLowerCase());
+        doc.issuer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (doc.googleDriveUrl && doc.googleDriveUrl.toLowerCase().includes(searchTerm.toLowerCase()));
 
       if (statusFilter === 'all') return matchSearch;
       return matchSearch && doc.status === statusFilter;
@@ -66,6 +105,60 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
     navigator.clipboard.writeText(url);
     setCopiedToken(doc.verificationToken);
     setTimeout(() => setCopiedToken(null), 2000);
+  };
+
+  const handleOpenEdit = (doc: VerifiedDocument) => {
+    setEditingDoc(doc);
+    setEditFormData({
+      documentName: doc.documentName || '',
+      documentNumber: doc.documentNumber || '',
+      documentType: doc.documentType || '',
+      documentDate: doc.documentDate || '',
+      issuer: doc.issuer || '',
+      signerName: doc.signerName || '',
+      signerPosition: doc.signerPosition || '',
+      googleDriveUrl: doc.googleDriveUrl || '',
+      description: doc.description || ''
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDoc) return;
+    setIsUpdating(true);
+    try {
+      await updateVerifiedDocument(editingDoc.verificationToken, {
+        documentName: editFormData.documentName.trim(),
+        documentNumber: editFormData.documentNumber.trim(),
+        documentType: editFormData.documentType.trim(),
+        documentDate: editFormData.documentDate.trim(),
+        issuer: editFormData.issuer.trim(),
+        signerName: editFormData.signerName.trim(),
+        signerPosition: editFormData.signerPosition.trim(),
+        googleDriveUrl: editFormData.googleDriveUrl.trim(),
+        description: editFormData.description.trim()
+      });
+      setEditingDoc(null);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      alert('Gagal memperbarui dokumen: ' + (err.message || 'Kesalahan sistem'));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingDoc) return;
+    setIsDeleting(true);
+    try {
+      await deleteVerifiedDocument(deletingDoc.verificationToken);
+      setDeletingDoc(null);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      alert('Gagal menghapus dokumen: ' + (err.message || 'Kesalahan sistem'));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleConfirmRevoke = async () => {
@@ -94,7 +187,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
           <div>
             <h3 className="text-xl font-bold text-white tracking-tight">Dokumen Tersimpan</h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Kelola seluruh dokumen resmi yang telah diverifikasi dengan QR Code elektronik.
+              Kelola seluruh dokumen resmi yang telah diverifikasi dengan QR Code elektronik. Anda dapat mengedit tautan Google Drive dan menghapus dokumen kapan saja.
             </p>
           </div>
 
@@ -117,7 +210,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Cari nama dokumen, nomor dokumen, atau ID verifikasi..."
+              placeholder="Cari nama dokumen, nomor dokumen, link Google Drive, atau ID verifikasi..."
               className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-xl py-2.5 pl-10 pr-4 text-xs text-white placeholder-slate-400 transition"
             />
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
@@ -153,7 +246,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                 <th className="py-3 px-4 font-semibold">Nama Dokumen</th>
                 <th className="py-3 px-4 font-semibold">Nomor</th>
                 <th className="py-3 px-4 font-semibold">Jenis</th>
-                <th className="py-3 px-4 font-semibold">Tanggal</th>
+                <th className="py-3 px-4 font-semibold">Link Google Drive</th>
                 <th className="py-3 px-4 font-semibold text-center">Status</th>
                 <th className="py-3 px-4 font-semibold text-center">Aksi</th>
               </tr>
@@ -185,8 +278,22 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
 
                     <td className="py-3.5 px-4 text-slate-300">{doc.documentType || '-'}</td>
 
-                    <td className="py-3.5 px-4 text-slate-400 text-[11px]">
-                      {doc.documentDate || '-'}
+                    {/* Google Drive Link Column */}
+                    <td className="py-3.5 px-4 max-w-[180px]">
+                      {doc.googleDriveUrl ? (
+                        <a
+                          href={doc.googleDriveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-indigo-950/50 text-indigo-300 hover:text-white border border-indigo-800/40 text-[11px] truncate max-w-[170px]"
+                          title={doc.googleDriveUrl}
+                        >
+                          <LinkIcon className="w-3 h-3 text-indigo-400 shrink-0" />
+                          <span className="truncate">Google Drive</span>
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-slate-500 italic">Belum diisi</span>
+                      )}
                     </td>
 
                     {/* Status Badge */}
@@ -214,6 +321,15 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                     {/* Action Buttons */}
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        {/* Tombol Edit (Google Drive URL & Info) */}
+                        <button
+                          onClick={() => handleOpenEdit(doc)}
+                          className="p-1.5 rounded-lg bg-indigo-900/60 hover:bg-indigo-800 text-indigo-200 hover:text-white transition"
+                          title="Edit Dokumen & Masukkan Link Google Drive"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+
                         {/* Lihat Detail */}
                         <button
                           onClick={() => setSelectedDoc(doc)}
@@ -245,25 +361,25 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                           )}
                         </button>
 
-                        {/* Cetak */}
-                        <button
-                          onClick={() => handlePrint(doc)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition hidden md:inline-flex"
-                          title="Cetak Dokumen"
-                        >
-                          <Printer className="w-3.5 h-3.5" />
-                        </button>
-
                         {/* Cabut Dokumen */}
                         {doc.status === 'VALID' && (
                           <button
                             onClick={() => setRevokingDoc(doc)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-400 transition"
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-950 text-slate-400 hover:text-amber-400 transition"
                             title="Cabut Status Validitas Dokumen"
                           >
                             <Ban className="w-3.5 h-3.5" />
                           </button>
                         )}
+
+                        {/* Tombol Hapus Dokumen */}
+                        <button
+                          onClick={() => setDeletingDoc(doc)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-900/60 text-slate-400 hover:text-red-300 transition"
+                          title="Hapus Dokumen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -273,6 +389,164 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
           </table>
         </div>
       </div>
+
+      {/* EDIT MODAL (Google Drive Link & Document Info) */}
+      {editingDoc && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-indigo-400" />
+                <h4 className="font-bold text-white text-base">Edit Dokumen & Link Google Drive</h4>
+              </div>
+              <button
+                onClick={() => setEditingDoc(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
+              {/* Highlight Google Drive Input */}
+              <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-800/50 space-y-1.5">
+                <label className="text-indigo-200 block font-bold flex items-center gap-1.5">
+                  <LinkIcon className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Link Google Drive Dokumen Surat (PENTING)</span>
+                </label>
+                <input
+                  type="url"
+                  value={editFormData.googleDriveUrl}
+                  onChange={(e) => setEditFormData({ ...editFormData, googleDriveUrl: e.target.value })}
+                  placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                  className="w-full bg-slate-900 border border-indigo-700/60 focus:border-indigo-400 rounded-lg px-3 py-2 text-white placeholder-slate-500 font-mono text-[11px]"
+                />
+                <p className="text-[10px] text-indigo-300/80 leading-relaxed">
+                  💡 Masukkan link Google Drive file yang sudah ditandatangani. Saat barcode/QR code dipindai oleh orang lain, tombol unduh file surat ini akan langsung muncul di halaman verifikasi!
+                </p>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1 font-medium">Nama Dokumen</label>
+                <input
+                  type="text"
+                  value={editFormData.documentName}
+                  onChange={(e) => setEditFormData({ ...editFormData, documentName: e.target.value })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-400 block mb-1 font-medium">Nomor Dokumen</label>
+                  <input
+                    type="text"
+                    value={editFormData.documentNumber}
+                    onChange={(e) => setEditFormData({ ...editFormData, documentNumber: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1 font-medium">Tanggal Dokumen</label>
+                  <input
+                    type="text"
+                    value={editFormData.documentDate}
+                    onChange={(e) => setEditFormData({ ...editFormData, documentDate: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1 font-medium">Instansi / Penerbit</label>
+                <input
+                  type="text"
+                  value={editFormData.issuer}
+                  onChange={(e) => setEditFormData({ ...editFormData, issuer: e.target.value })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-400 block mb-1 font-medium">Nama Penandatangan</label>
+                  <input
+                    type="text"
+                    value={editFormData.signerName}
+                    onChange={(e) => setEditFormData({ ...editFormData, signerName: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1 font-medium">Jabatan</label>
+                  <input
+                    type="text"
+                    value={editFormData.signerPosition}
+                    onChange={(e) => setEditFormData({ ...editFormData, signerPosition: e.target.value })}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingDoc(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating}
+                  className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition flex items-center justify-center gap-1.5 shadow"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{isUpdating ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {deletingDoc && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center">
+              <h4 className="text-lg font-bold text-white">Hapus Dokumen Terverifikasi?</h4>
+              <p className="text-xs text-slate-400 mt-1">
+                Dokumen: <strong className="text-white">{deletingDoc.documentName}</strong> ({deletingDoc.verificationToken})
+              </p>
+              <p className="text-xs text-red-300/90 mt-2 bg-red-950/30 p-2.5 rounded-lg border border-red-800/40">
+                Peringatan: Dokumen yang dihapus tidak akan bisa diverifikasi lagi. Jika barcode di-scan nanti, sistem akan menampilkan <strong>Dokumen Tidak Ditemukan</strong>.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                disabled={isDeleting}
+                onClick={() => setDeletingDoc(null)}
+                className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+              >
+                Batal
+              </button>
+              <button
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
+              >
+                {isDeleting ? 'Menghapus...' : 'Ya, Hapus Dokumen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DETAIL MODAL */}
       {selectedDoc && (
@@ -320,6 +594,21 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                 <span className="text-emerald-300 font-medium">{selectedDoc.signerName} ({selectedDoc.signerPosition})</span>
               </div>
               <div className="flex justify-between border-b border-slate-800/80 py-1.5">
+                <span className="text-slate-400">Link Google Drive:</span>
+                {selectedDoc.googleDriveUrl ? (
+                  <a
+                    href={selectedDoc.googleDriveUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-indigo-400 hover:underline max-w-[200px] truncate"
+                  >
+                    Buka File Drive
+                  </a>
+                ) : (
+                  <span className="text-slate-500 italic">Belum diatur</span>
+                )}
+              </div>
+              <div className="flex justify-between border-b border-slate-800/80 py-1.5">
                 <span className="text-slate-400">Status Saat Ini:</span>
                 <span className={selectedDoc.status === 'VALID' ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
                   {selectedDoc.status}
@@ -353,7 +642,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
         </div>
       )}
 
-      {/* REVOKE CONFIRMATION MODAL (Section 18) */}
+      {/* REVOKE CONFIRMATION MODAL */}
       {revokingDoc && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-5">

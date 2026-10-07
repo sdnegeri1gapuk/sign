@@ -26,7 +26,8 @@ import {
   Building2,
   Calendar,
   Hash,
-  UserCheck
+  UserCheck,
+  Link as LinkIcon
 } from 'lucide-react';
 import {
   ElectronicDocFormData,
@@ -48,6 +49,7 @@ import {
   triggerPdfDownload,
   triggerImageDownload
 } from '../../utils/pdfElectronicExport';
+import { getAppSettings } from '../../utils/appSettings';
 
 interface ElectronicCreateDocProps {
   onDocumentCreated?: (doc: VerifiedDocument) => void;
@@ -72,17 +74,46 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
   const [zoomScale, setZoomScale] = useState<number>(1.0);
   const [pageDimensions, setPageDimensions] = useState<{ width: number; height: number }[]>([]);
 
-  // Form Data
-  const [formData, setFormData] = useState<ElectronicDocFormData>({
-    documentName: 'Surat Keterangan Pengesahan Resmi',
-    documentType: 'Surat Keterangan',
-    documentNumber: '421.2/089/DISDIK/X/2026',
-    documentDate: '07 Oktober 2026',
-    issuer: 'Dinas Pendidikan & Kebudayaan',
-    signerName: 'H. Masrun, S.Pd, M.Pd',
-    signerPosition: 'Kepala Instansi / Pejabat Penandatangan',
-    description: 'Dokumen elektronik dengan QR Code verifikasi keabsahan resmi.'
+  // Form Data (Automatically follows Settings for issuer, signerName, and signerPosition)
+  const [formData, setFormData] = useState<ElectronicDocFormData>(() => {
+    const settings = getAppSettings();
+    return {
+      documentName: 'Surat Keterangan Pengesahan Resmi',
+      documentType: 'Surat Keterangan',
+      documentNumber: '421.2/089/DISDIK/X/2026',
+      documentDate: new Intl.DateTimeFormat('id-ID', { dateStyle: 'long' }).format(new Date()),
+      issuer: settings.issuer,
+      signerName: settings.signerName,
+      signerPosition: settings.signerPosition,
+      description: 'Dokumen elektronik dengan QR Code verifikasi keabsahan resmi.'
+    };
   });
+
+  // Re-sync with settings if settings are updated
+  useEffect(() => {
+    const onSettingsChange = () => {
+      const settings = getAppSettings();
+      setFormData((prev) => ({
+        ...prev,
+        issuer: settings.issuer,
+        signerName: settings.signerName,
+        signerPosition: settings.signerPosition
+      }));
+    };
+    window.addEventListener('app_settings_changed', onSettingsChange);
+    return () => window.removeEventListener('app_settings_changed', onSettingsChange);
+  }, []);
+
+  const handleApplySettingsProfile = () => {
+    const settings = getAppSettings();
+    setFormData((prev) => ({
+      ...prev,
+      issuer: settings.issuer,
+      signerName: settings.signerName,
+      signerPosition: settings.signerPosition
+    }));
+  };
+  const [googleDriveUrl, setGoogleDriveUrl] = useState<string>('');
 
   // QR Generation state
   const [verificationToken, setVerificationToken] = useState<string>('');
@@ -233,13 +264,17 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
       setOriginalFileName(file.name);
       setFileSizeStr(`${(file.size / 1024).toFixed(1)} KB`);
 
-      // Auto-fill document name from file name if blank
-      if (!formData.documentName || formData.documentName.includes('Pengesahan')) {
-        setFormData((prev) => ({
-          ...prev,
-          documentName: file.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ')
-        }));
-      }
+      // Auto-fill document name from file name if blank and ensure settings defaults
+      const settings = getAppSettings();
+      setFormData((prev) => ({
+        ...prev,
+        documentName: (!prev.documentName || prev.documentName.includes('Pengesahan'))
+          ? file.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ')
+          : prev.documentName,
+        issuer: settings.issuer,
+        signerName: settings.signerName,
+        signerPosition: settings.signerPosition
+      }));
 
       setStep('form_and_editor');
     };
@@ -248,6 +283,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
 
   // Load sample official document
   const handleLoadSamplePdf = async () => {
+    const settings = getAppSettings();
     const sample = await generateSampleSKPPdf();
     setPdfBytes(sample);
     setOriginalFileName('Surat_Keterangan_Resmi_Sekolah.pdf');
@@ -256,10 +292,10 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
       documentName: 'Surat Keterangan Resmi Instansi',
       documentType: 'Surat Keterangan',
       documentNumber: '421.2/123/SDN1GPK/X/2026',
-      documentDate: '07 Oktober 2026',
-      issuer: 'SD Negeri 1 Gapuk',
-      signerName: 'H. Masrun, S.Pd',
-      signerPosition: 'Kepala Sekolah',
+      documentDate: new Intl.DateTimeFormat('id-ID', { dateStyle: 'long' }).format(new Date()),
+      issuer: settings.issuer,
+      signerName: settings.signerName,
+      signerPosition: settings.signerPosition,
       description: 'Dokumen resmi sekolah dengan verifikasi tanda tangan elektronik QR Code.'
     });
     setStep('form_and_editor');
@@ -338,25 +374,34 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
     setIsResizing(false);
   };
 
-  // Center QR button
+  // Center QR button on the target page
   const handleCenterQr = () => {
-    const currentPageDim = pageDimensions[currentPage - 1] || { width: 595, height: 842 };
+    const targetDim = pageDimensions[qrSettings.pageNumber - 1] || { width: 595, height: 842 };
     setQrSettings((prev) => ({
       ...prev,
-      pageNumber: currentPage,
-      x: Math.round((currentPageDim.width - prev.width) / 2),
-      y: Math.round((currentPageDim.height - prev.height) / 2)
+      x: Math.round((targetDim.width - prev.width) / 2),
+      y: Math.round((targetDim.height - prev.height) / 2)
     }));
   };
 
-  // Reset QR Position
+  // Reset QR Position on the target page
   const handleResetPosition = () => {
-    const currentPageDim = pageDimensions[currentPage - 1] || { width: 595, height: 842 };
+    const targetDim = pageDimensions[qrSettings.pageNumber - 1] || { width: 595, height: 842 };
+    setQrSettings((prev) => ({
+      ...prev,
+      x: Math.max(20, Math.round(targetDim.width - prev.width - 30)),
+      y: Math.max(20, Math.round(targetDim.height - prev.height - 40))
+    }));
+  };
+
+  // Explicitly place QR on whatever page is currently being viewed
+  const handlePlaceQrOnCurrentPage = () => {
+    const targetDim = pageDimensions[currentPage - 1] || { width: 595, height: 842 };
     setQrSettings((prev) => ({
       ...prev,
       pageNumber: currentPage,
-      x: Math.max(20, Math.round(currentPageDim.width - prev.width - 30)),
-      y: Math.max(20, Math.round(currentPageDim.height - prev.height - 40))
+      x: Math.min(prev.x, Math.max(20, targetDim.width - prev.width - 20)),
+      y: Math.min(prev.y, Math.max(20, targetDim.height - prev.height - 20))
     }));
   };
 
@@ -424,7 +469,8 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
         allowView: true,
         allowDownload: true,
         qrDataUrl,
-        verificationUrl
+        verificationUrl,
+        googleDriveUrl: googleDriveUrl.trim() || undefined
       };
 
       await saveVerifiedDocument(newDocRecord);
@@ -575,7 +621,15 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                     <FileText className="w-4 h-4 text-emerald-400" />
                     <h4 className="font-bold text-sm text-white">DATA DOKUMEN</h4>
                   </div>
-                  <span className="text-[11px] text-emerald-400 font-medium">Wajib Diisi</span>
+                  <button
+                    type="button"
+                    onClick={handleApplySettingsProfile}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold border border-emerald-500/20 transition flex items-center gap-1"
+                    title="Muat ulang nama instansi, penandatangan, dan jabatan dari menu Pengaturan"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Muat Profil Pengaturan</span>
+                  </button>
                 </div>
 
                 <div className="space-y-3 text-xs">
@@ -625,20 +679,26 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="text-slate-400 block mb-1 font-medium">5. Instansi/Penerbit</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-400 font-medium">5. Instansi/Penerbit</label>
+                        <span className="text-[10px] text-emerald-400 font-mono">Pengaturan</span>
+                      </div>
                       <input
                         type="text"
                         value={formData.issuer}
                         onChange={(e) => setFormData({ ...formData, issuer: e.target.value })}
                         placeholder="Contoh: SD Negeri 1 Gapuk"
-                        className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-white transition"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-white transition font-medium"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-slate-400 block mb-1 font-medium">6. Nama Penandatangan</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-400 font-medium">6. Penandatangan</label>
+                        <span className="text-[10px] text-emerald-400 font-mono">Pengaturan</span>
+                      </div>
                       <input
                         type="text"
                         value={formData.signerName}
@@ -648,13 +708,16 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="text-slate-400 block mb-1 font-medium">7. Jabatan Penandatangan</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-400 font-medium">7. Jabatan Pejabat</label>
+                        <span className="text-[10px] text-emerald-400 font-mono">Pengaturan</span>
+                      </div>
                       <input
                         type="text"
                         value={formData.signerPosition}
                         onChange={(e) => setFormData({ ...formData, signerPosition: e.target.value })}
                         placeholder="Contoh: Kepala Sekolah"
-                        className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-white transition"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-white transition font-medium"
                       />
                     </div>
                   </div>
@@ -668,6 +731,23 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                       placeholder="Keterangan tambahan dokumen resmi..."
                       className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-white transition resize-none"
                     />
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-indigo-950/30 border border-indigo-800/40 space-y-1">
+                    <label className="text-indigo-300 block font-semibold flex items-center gap-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>9. Link Google Drive Dokumen (Opsional)</span>
+                    </label>
+                    <input
+                      type="url"
+                      value={googleDriveUrl}
+                      onChange={(e) => setGoogleDriveUrl(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
+                      className="w-full bg-slate-900 border border-indigo-700/60 focus:border-indigo-400 rounded-lg px-2.5 py-1.5 text-white font-mono text-[11px]"
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      Bisa diisi sekarang atau nanti via tombol Edit di menu Dokumen Tersimpan.
+                    </p>
                   </div>
                 </div>
 
@@ -700,9 +780,19 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                     <span className="text-[11px] text-slate-400">Presisi Posisi</span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-slate-400 block mb-1">Halaman Target</label>
+                  {/* Dedicated Page Selection Section */}
+                  <div className="p-3.5 rounded-xl bg-slate-800/70 border border-slate-700/80 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-white font-bold flex items-center gap-1.5">
+                        <Layers className="w-4 h-4 text-emerald-400" />
+                        <span>Halaman Penempatan Barcode:</span>
+                      </label>
+                      <span className="text-emerald-400 font-bold font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
+                        Hal. {qrSettings.pageNumber} dari {numPages}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       <select
                         value={qrSettings.pageNumber}
                         onChange={(e) => {
@@ -710,18 +800,35 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                           setQrSettings({ ...qrSettings, pageNumber: p });
                           setCurrentPage(p);
                         }}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                        className="flex-1 bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-white font-medium"
                       >
                         {Array.from({ length: numPages }, (_, i) => (
                           <option key={i + 1} value={i + 1}>
-                            Halaman {i + 1}
+                            Tempatkan di Halaman {i + 1} {i + 1 === qrSettings.pageNumber ? '(Dipilih)' : ''}
                           </option>
                         ))}
                       </select>
+
+                      {qrSettings.pageNumber !== currentPage && (
+                        <button
+                          type="button"
+                          onClick={handlePlaceQrOnCurrentPage}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] whitespace-nowrap shadow transition"
+                          title={`Pindahkan posisi barcode ke halaman ${currentPage}`}
+                        >
+                          Pindah ke Hal. {currentPage}
+                        </button>
+                      )}
                     </div>
 
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      💡 <strong>Catatan:</strong> Barcode hanya akan muncul dan dicetak pada <span className="text-emerald-300 font-medium">Halaman {qrSettings.pageNumber}</span>. Halaman lainnya tidak akan memiliki barcode.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="text-slate-400 block mb-1">Ukuran Lebar/Tinggi</label>
+                      <label className="text-slate-400 block mb-1">Ukuran (pt)</label>
                       <input
                         type="number"
                         min="60"
@@ -731,7 +838,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                           const val = Number(e.target.value);
                           setQrSettings({ ...qrSettings, width: val, height: val });
                         }}
-                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white"
                       />
                     </div>
 
@@ -743,7 +850,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                         onChange={(e) =>
                           setQrSettings({ ...qrSettings, x: Number(e.target.value) })
                         }
-                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono"
                       />
                     </div>
 
@@ -755,7 +862,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                         onChange={(e) =>
                           setQrSettings({ ...qrSettings, y: Number(e.target.value) })
                         }
-                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono"
                       />
                     </div>
                   </div>
@@ -809,34 +916,77 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
             {/* Right Column: PDF Viewer with Drag-and-Drop QR Overlay */}
             <div className="lg:col-span-8 space-y-3">
               {/* Toolbar */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-slate-300">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
                 <div className="flex items-center gap-2">
                   <button
                     disabled={currentPage <= 1}
-                    onClick={() => {
-                      const p = Math.max(1, currentPage - 1);
-                      setCurrentPage(p);
-                      if (isQrGenerated) setQrSettings((s) => ({ ...s, pageNumber: p }));
-                    }}
-                    className="p-1 rounded hover:bg-slate-800 disabled:opacity-40"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="p-1 rounded hover:bg-slate-800 disabled:opacity-40 transition"
+                    title="Halaman Sebelumnya"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <span>
-                    Halaman {currentPage} dari {numPages}
+                  <span className="font-medium">
+                    Halaman <span className="text-white font-bold">{currentPage}</span> dari <span className="text-white font-bold">{numPages}</span>
                   </span>
                   <button
                     disabled={currentPage >= numPages}
-                    onClick={() => {
-                      const p = Math.min(numPages, currentPage + 1);
-                      setCurrentPage(p);
-                      if (isQrGenerated) setQrSettings((s) => ({ ...s, pageNumber: p }));
-                    }}
-                    className="p-1 rounded hover:bg-slate-800 disabled:opacity-40"
+                    onClick={() => setCurrentPage((p) => Math.min(numPages, p + 1))}
+                    className="p-1 rounded hover:bg-slate-800 disabled:opacity-40 transition"
+                    title="Halaman Berikutnya"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
+
+                  {/* Quick Page Jump Pills (if multi-page) */}
+                  {numPages > 1 && (
+                    <div className="flex items-center gap-1 ml-2 border-l border-slate-800 pl-2.5 overflow-x-auto max-w-[240px] py-0.5">
+                      {Array.from({ length: numPages }, (_, i) => {
+                        const pageNum = i + 1;
+                        const hasQr = isQrGenerated && qrSettings.pageNumber === pageNum;
+                        const isViewing = currentPage === pageNum;
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`px-2 py-0.5 rounded text-[11px] font-semibold transition flex items-center gap-1 ${
+                              isViewing
+                                ? 'bg-emerald-600 text-white shadow-sm'
+                                : hasQr
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30'
+                                : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                            }`}
+                            title={`Lihat Halaman ${pageNum}${hasQr ? ' (Barcode ditempatkan di halaman ini)' : ''}`}
+                          >
+                            <span>{pageNum}</span>
+                            {hasQr && <span className="text-[10px]">🏷️</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
+
+                {/* Page Barcode Placement Action */}
+                {isQrGenerated && numPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    {qrSettings.pageNumber === currentPage ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold text-[11px]">
+                        <Check className="w-3.5 h-3.5" />
+                        Barcode aktif di Hal. {currentPage}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handlePlaceQrOnCurrentPage}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] shadow transition"
+                      >
+                        <span>📍 Pindahkan Barcode ke Hal. {currentPage}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1">
@@ -871,8 +1021,50 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
               {/* Viewport Canvas Container */}
               <div
                 ref={containerRef}
-                className="bg-slate-950 border border-slate-800 rounded-2xl p-4 overflow-auto flex justify-center items-start min-h-[550px] shadow-2xl relative"
+                className="bg-slate-950 border border-slate-800 rounded-2xl p-4 overflow-auto flex flex-col justify-start items-center min-h-[550px] shadow-2xl relative"
               >
+                {/* Multipage Status Banner */}
+                {isQrGenerated && numPages > 1 && (
+                  qrSettings.pageNumber !== currentPage ? (
+                    <div className="w-full max-w-2xl mb-3 p-3 rounded-xl bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs flex flex-wrap items-center justify-between gap-2 shadow-lg">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>
+                          Barcode <strong>TIDAK DITEMPATKAN</strong> pada Halaman {currentPage}. Barcode saat ini berada di <strong>Halaman {qrSettings.pageNumber}</strong>.
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage(qrSettings.pageNumber)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30 font-medium text-[11px] transition"
+                        >
+                          Lihat Hal. {qrSettings.pageNumber}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handlePlaceQrOnCurrentPage}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] shadow transition"
+                        >
+                          Pindahkan ke Hal. {currentPage}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="w-full max-w-2xl mb-3 px-3.5 py-2 rounded-xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs flex items-center justify-between shadow-lg">
+                      <span className="flex items-center gap-2 font-medium">
+                        <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>
+                          Barcode ditempatkan pada <strong>Halaman {currentPage}</strong> ini saja (dari {numPages} halaman). Halaman lain tidak memiliki barcode.
+                        </span>
+                      </span>
+                      <span className="text-[11px] text-emerald-400 font-mono font-bold">
+                        Hal {currentPage}/{numPages}
+                      </span>
+                    </div>
+                  )
+                )}
+
                 <div
                   className="relative shadow-2xl bg-white"
                   style={{
@@ -1118,10 +1310,17 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                 <span className="text-slate-400">ID Verifikasi:</span>
                 <span className="font-mono font-bold text-emerald-400">{verificationToken}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Halaman QR:</span>
-                <span className="text-slate-200">Halaman {qrSettings.pageNumber}</span>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Halaman Barcode:</span>
+                <span className="text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
+                  Halaman {qrSettings.pageNumber} dari {numPages} (Hanya 1 Halaman ini)
+                </span>
               </div>
+              {numPages > 1 && (
+                <div className="text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded-lg border border-slate-700/50">
+                  ℹ️ Barcode <strong>hanya</strong> akan dicetak pada Halaman {qrSettings.pageNumber}. Halaman lainnya tetap bersih dari barcode.
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-400">Koordinat QR:</span>
                 <span className="font-mono text-slate-300">X: {qrSettings.x} pt, Y: {qrSettings.y} pt</span>

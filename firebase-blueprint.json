@@ -160,6 +160,11 @@
           "type": "string",
           "maxLength": 500000,
           "description": "Base64 data URL preview of generated QR code"
+        },
+        "googleDriveUrl": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Google Drive download link for the signed document"
         }
       },
       "required": [
