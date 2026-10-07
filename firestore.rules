@@ -61,8 +61,10 @@ service cloud.firestore {
       // Public verification must allow read without authentication
       allow read: if true;
       allow create: if isValidId(verificationToken) && isValidDocument(incoming()) && incoming().verificationToken == verificationToken;
+      // Allow updates for verification counter or status change
       allow update: if isValidId(verificationToken);
-      allow delete: if isValidId(verificationToken);
+      // STRICTLY BLOCK DELETIONS: Verified documents can never be deleted from client requests
+      allow delete: if false;
     }
 
     match /verification_logs/{logId} {

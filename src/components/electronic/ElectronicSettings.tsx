@@ -9,9 +9,11 @@ import {
   Check,
   RefreshCw,
   Lock,
-  Globe
+  Globe,
+  KeyRound
 } from 'lucide-react';
 import firebaseConfig from '../../../firebase-applet-config.json';
+import { getAdminPin, setAdminPin } from '../../utils/adminAuth';
 
 export const ElectronicSettings: React.FC = () => {
   const [defaultIssuer, setDefaultIssuer] = useState('SD Negeri 1 Gapuk');
@@ -19,10 +21,14 @@ export const ElectronicSettings: React.FC = () => {
   const [defaultPosition, setDefaultPosition] = useState('Kepala Sekolah');
   const [allowPublicView, setAllowPublicView] = useState(true);
   const [allowPublicDownload, setAllowPublicDownload] = useState(true);
+  const [currentPin, setCurrentPinState] = useState(getAdminPin());
   const [saved, setSaved] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (currentPin.trim().length >= 4) {
+      setAdminPin(currentPin.trim());
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -34,7 +40,7 @@ export const ElectronicSettings: React.FC = () => {
           <div>
             <h3 className="text-xl font-bold text-white tracking-tight">Pengaturan Sistem</h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Konfigurasi instansi bawaan dan keamanan verifikasi dokumen elektronik.
+              Konfigurasi instansi bawaan, hak akses publik, dan keamanan PIN pengelola.
             </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -43,6 +49,30 @@ export const ElectronicSettings: React.FC = () => {
         </div>
 
         <form onSubmit={handleSave} className="space-y-5 text-xs">
+          {/* Keamanan PIN Pengelola (Mencegah Akses Pengunjung yang Scan QR) */}
+          <div className="space-y-3 bg-emerald-950/20 border border-emerald-800/40 p-4 rounded-xl">
+            <h4 className="font-bold text-white text-sm flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-emerald-400" />
+              <span>Keamanan PIN Pengelola (Admin Lock)</span>
+            </h4>
+            <p className="text-slate-400 text-[11px] leading-relaxed">
+              Orang lain yang memindai QR Code <strong>hanya dapat melihat hasil verifikasi dokumen</strong> dan tidak dapat masuk ke aplikasi untuk mengubah atau menghapus data.
+            </p>
+
+            <div className="max-w-xs">
+              <label className="text-slate-300 block mb-1 font-medium">PIN Akses Pengelola (Minimal 4 Angka/Karakter)</label>
+              <input
+                type="text"
+                value={currentPin}
+                onChange={(e) => setCurrentPinState(e.target.value)}
+                placeholder="Contoh: 1234"
+                maxLength={8}
+                className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-white font-mono tracking-widest text-sm"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">PIN saat ini: {getAdminPin()} (Hanya Anda yang tahu)</span>
+            </div>
+          </div>
+
           {/* Instansi Defaults */}
           <div className="space-y-3">
             <h4 className="font-bold text-white text-sm flex items-center gap-2">
@@ -82,7 +112,7 @@ export const ElectronicSettings: React.FC = () => {
             </div>
           </div>
 
-          {/* Public Access Control (Section 15) */}
+          {/* Public Access Control */}
           <div className="space-y-3 pt-3 border-t border-slate-800">
             <h4 className="font-bold text-white text-sm flex items-center gap-2">
               <Globe className="w-4 h-4 text-emerald-400" />
@@ -113,7 +143,7 @@ export const ElectronicSettings: React.FC = () => {
                   className="rounded border-slate-700 text-emerald-600 focus:ring-emerald-500"
                 />
                 <div>
-                  <span className="font-semibold text-white block">Izinkan Pengunduhan QR Code & Dokumen</span>
+                  <span className="font-semibold text-white block">Izinkan Pengunduhan QR Code Dokumen</span>
                   <span className="text-[11px] text-slate-400">
                     Menyediakan tombol unduh file pada halaman hasil pindai verifikasi.
                   </span>
@@ -139,8 +169,8 @@ export const ElectronicSettings: React.FC = () => {
                 <span className="font-mono text-slate-300">{(firebaseConfig as any).firestoreDatabaseId || 'default'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Status Penyimpanan:</span>
-                <span className="text-emerald-400 font-semibold">Tersambung & Sinkron Realtime</span>
+                <span className="text-slate-400">Perlindungan Hapus Data:</span>
+                <span className="text-emerald-400 font-semibold">Aktif (Firestore Rules Memblokir Penghapusan oleh Publik)</span>
               </div>
             </div>
           </div>

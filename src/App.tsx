@@ -58,7 +58,7 @@ export default function App() {
     return (
       <ElectronicPublicVerify
         initialToken={publicVerifyToken}
-        onBackToApp={() => {
+        onAdminUnlock={() => {
           setPublicVerifyToken(null);
           // Clean hash without reloading
           if (window.location.hash) {

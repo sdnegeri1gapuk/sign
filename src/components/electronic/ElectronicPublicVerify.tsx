@@ -1,8 +1,6 @@
-import React, { useEffect, useState, useTransition } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
-  ShieldAlert,
-  ShieldX,
   Search,
   CheckCircle2,
   AlertTriangle,
@@ -12,31 +10,30 @@ import {
   UserCheck,
   Calendar,
   Hash,
-  Eye,
   Download,
-  Share2,
   Copy,
   Check,
-  ArrowLeft,
-  ExternalLink,
   QrCode,
   Clock,
-  RefreshCw
+  RefreshCw,
+  Lock,
+  KeyRound
 } from 'lucide-react';
 import { VerifiedDocument } from '../../types';
 import {
   getVerifiedDocumentByToken,
   recordVerificationScan
 } from '../../utils/electronicService';
+import { verifyAndLoginAdmin } from '../../utils/adminAuth';
 
 interface ElectronicPublicVerifyProps {
   initialToken?: string;
-  onBackToApp?: () => void;
+  onAdminUnlock?: () => void;
 }
 
 export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
   initialToken = '',
-  onBackToApp
+  onAdminUnlock
 }) => {
   const [searchToken, setSearchToken] = useState(initialToken);
   const [activeToken, setActiveToken] = useState(initialToken);
@@ -45,6 +42,11 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
   const [hasSearched, setHasSearched] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [scanLogged, setScanLogged] = useState<boolean>(false);
+
+  // Admin PIN prompt state (discreet for administrator only)
+  const [showAdminPinModal, setShowAdminPinModal] = useState<boolean>(false);
+  const [pinInput, setPinInput] = useState<string>('');
+  const [pinError, setPinError] = useState<boolean>(false);
 
   // Perform lookup when activeToken changes
   useEffect(() => {
@@ -98,6 +100,20 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleAdminLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (verifyAndLoginAdmin(pinInput)) {
+      setShowAdminPinModal(false);
+      setPinInput('');
+      setPinError(false);
+      if (onAdminUnlock) {
+        onAdminUnlock();
+      }
+    } else {
+      setPinError(true);
+    }
+  };
+
   const formatDate = (timestamp?: number) => {
     if (!timestamp) return '-';
     return new Date(timestamp).toLocaleDateString('id-ID', {
@@ -110,33 +126,30 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col">
-      {/* Top Header */}
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 flex flex-col select-none">
+      {/* Top Header - STRICTLY READ-ONLY PUBLIC PORTAL (NO ACCESS TO APP) */}
+      <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30 shadow-md">
+        <div className="max-w-4xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-white font-bold shrink-0">
               <ShieldCheck className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="font-bold text-base md:text-lg text-white leading-tight">
+              <h1 className="font-extrabold text-sm md:text-base text-white leading-tight tracking-wide">
                 VERIFIKASI DOKUMEN ELEKTRONIK
               </h1>
-              <p className="text-xs text-slate-400">
-                Sistem Pengesahan & Validasi Dokumen Resmi
+              <p className="text-[11px] text-slate-400">
+                Portal Publik Pengesahan Dokumen Resmi Berbasis QR Code
               </p>
             </div>
           </div>
 
-          {onBackToApp && (
-            <button
-              onClick={onBackToApp}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 border border-slate-700 transition"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Kembali ke Aplikasi</span>
-            </button>
-          )}
+          {/* Official Security Badge (Replacing any back button) */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-950/60 border border-emerald-800/40 text-emerald-400 text-xs font-semibold">
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Portal Publik Resmi</span>
+            <span className="sm:hidden">Resmi</span>
+          </div>
         </div>
       </header>
 
@@ -164,7 +177,7 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
             </div>
           </form>
           <p className="text-xs text-slate-500 mt-2 text-center">
-            Pindai QR Code pada dokumen fisik atau ketik kode verifikasi di atas untuk memastikan keaslian.
+            Pindai QR Code pada dokumen fisik atau ketik kode verifikasi di atas untuk memeriksa keaslian dokumen.
           </p>
         </div>
 
@@ -173,7 +186,7 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
           <div className="p-12 text-center bg-slate-900/60 rounded-2xl border border-slate-800">
             <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mx-auto mb-3" />
             <p className="text-sm font-medium text-slate-300">Menghubungkan ke Database Verifikasi...</p>
-            <p className="text-xs text-slate-500 mt-1">Memeriksa tanda tangan dan status dokumen resmi</p>
+            <p className="text-xs text-slate-500 mt-1">Memeriksa keabsahan dan keaslian dokumen</p>
           </div>
         )}
 
@@ -295,7 +308,7 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
+                  {/* Action Buttons (Copy Link & Download QR) */}
                   <div className="pt-2 flex flex-wrap gap-3">
                     <button
                       onClick={handleCopyLink}
@@ -422,10 +435,81 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/80 py-4 text-center text-xs text-slate-500">
-        <p>© 2026 Verifikasi Dokumen Elektronik — Sistem Keabsahan Dokumen Berbasis QR Code Resmi</p>
+      {/* Footer - Isolated with Discreet Admin Login */}
+      <footer className="border-t border-slate-800/80 py-5 text-center text-xs text-slate-500 max-w-4xl mx-auto w-full px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <p className="text-[11px]">
+          © 2026 Verifikasi Dokumen Elektronik • Akses Publik Read-Only (Hanya Lihat)
+        </p>
+
+        {/* Discreet PIN Login for Administrator Only */}
+        <button
+          onClick={() => setShowAdminPinModal(true)}
+          className="text-[11px] text-slate-600 hover:text-slate-400 transition flex items-center gap-1 cursor-pointer"
+          title="Login Pengelola / Administrator"
+        >
+          <Lock className="w-3 h-3" />
+          <span>Akses Pengelola</span>
+        </button>
       </footer>
+
+      {/* PIN Authentication Modal for Administrator */}
+      {showAdminPinModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+              <KeyRound className="w-6 h-6" />
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-base font-bold text-white">Masukkan PIN Pengelola</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Akses ke aplikasi utama dibatasi dengan PIN keamanan untuk mencegah perubahan oleh publik.
+              </p>
+            </div>
+
+            <form onSubmit={handleAdminLoginSubmit} className="space-y-3">
+              <input
+                type="password"
+                maxLength={8}
+                value={pinInput}
+                onChange={(e) => {
+                  setPinInput(e.target.value);
+                  setPinError(false);
+                }}
+                placeholder="Masukkan PIN (Default: 1234)"
+                autoFocus
+                className="w-full text-center tracking-widest text-lg font-mono py-2.5 bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-xl text-white"
+              />
+
+              {pinError && (
+                <p className="text-xs text-red-400 text-center font-medium">
+                  PIN salah. Akses ke aplikasi ditolak.
+                </p>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminPinModal(false);
+                    setPinInput('');
+                    setPinError(false);
+                  }}
+                  className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow"
+                >
+                  Buka Aplikasi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
