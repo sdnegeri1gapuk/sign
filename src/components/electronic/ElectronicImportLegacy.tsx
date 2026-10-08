@@ -27,7 +27,10 @@ import {
   generateVerificationUrl
 } from '../../utils/electronicService';
 import { getAppSettings } from '../../utils/appSettings';
-import { generateSampleIjazahPdf } from '../../utils/samplePdf';
+import {
+  generateSampleIjazahPdf,
+  generateSampleTranskripPdf
+} from '../../utils/samplePdf';
 import { pdfjsLib } from '../../utils/pdfWorker';
 import {
   extractIjazahMetadata,
@@ -55,17 +58,20 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
   const [numPages, setNumPages] = useState<number>(1);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Canvas Ref for PDF Page Preview
+  // Canvas Ref and element state for PDF Page Preview
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  const [isRenderingPreview, setIsRenderingPreview] = useState<boolean>(false);
+  const renderTaskRef = useRef<any>(null);
 
   // Form Data (Auto-synced with AppSettings for Instansi & Kepala Sekolah)
   const [formData, setFormData] = useState<ElectronicDocFormData>(() => {
     const settings = getAppSettings();
     return {
-      documentName: 'Ijazah Kelulusan Siswa',
+      documentName: 'Ijazah - Ahmad Fauzi',
       documentType: 'Ijazah',
-      documentNumber: 'DN-01/D-SD/K13/23/0012345',
-      documentDate: '15 Juni 2024',
+      documentNumber: '111202663419179',
+      documentDate: '14 Juli 2026',
       issuer: settings.issuer,
       signerName: settings.signerName,
       signerPosition: settings.signerPosition,
@@ -109,10 +115,25 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     }));
   };
 
-  // Update Token and synchronize Legacy Barcode URL
+  // Update Token and synchronize Legacy Barcode URL & Document Type
   const handleCustomTokenChange = (val: string) => {
     setCustomToken(val);
     setLegacyBarcodeUrl(formatLegacyBarcodeUrl(val));
+
+    const upperVal = val.trim().toUpperCase();
+    if (upperVal.startsWith('TRN-') || upperVal.startsWith('TRN')) {
+      setFormData((prev) => ({
+        ...prev,
+        documentType: 'Transkrip',
+        documentName: prev.documentName.replace(/^Ijazah/i, 'Transkrip')
+      }));
+    } else if (upperVal.startsWith('IJZ-') || upperVal.startsWith('IJZ')) {
+      setFormData((prev) => ({
+        ...prev,
+        documentType: 'Ijazah',
+        documentName: prev.documentName.replace(/^Transkrip/i, 'Ijazah')
+      }));
+    }
   };
 
   // Attempt to extract a token/code from legacy URL automatically
@@ -129,14 +150,14 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
             urlObj.searchParams.get('v') ||
             urlObj.searchParams.get('id');
           if (qToken) {
-            setCustomToken(qToken.trim().toUpperCase());
+            handleCustomTokenChange(qToken.trim().toUpperCase());
             return;
           }
           const segments = urlObj.pathname.split('/').filter(Boolean);
           if (segments.length > 0) {
             const lastSegment = segments[segments.length - 1];
             if (lastSegment && lastSegment.length >= 4 && lastSegment.length <= 40) {
-              setCustomToken(lastSegment.trim().toUpperCase());
+              handleCustomTokenChange(lastSegment.trim().toUpperCase());
               return;
             }
           }
@@ -147,7 +168,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     }
   };
 
-  // Handle PDF file upload with automatic Ijazah field extraction
+  // Handle PDF file upload with automatic Ijazah / Transkrip field extraction
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -166,12 +187,10 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
 
       const settings = getAppSettings();
 
-      // Ekstraksi otomatis:
-      // 1. Nama Dokumen ("Ijazah - {nama siswa}")
-      // 2. Nomor Ijazah (dari pojok kanan atas di file)
-      // 3. Tanggal Dokumen (tanggal penandatanganan)
-      // 4. Token Dokumen (dari judul berkas tanpa "_sign")
-      // 5. Link hasil scan barcode lama (format https://sdnegeri1gapuk.github.io/verifikasi-ijazah-v2/verifikasi.html?kode={token})
+      // Ekstraksi otomatis berbasis prefix Token (IJZ- vs TRN-):
+      // - TRN- (Transkrip): Nama Dokumen "Transkrip - {nama siswa}" (setelah "Nama Lengkap :"), Nomor (setelah "Nomor :"), Jenis "Transkrip"
+      // - IJZ- (Ijazah): Nama Dokumen "Ijazah - {nama siswa}" (setelah "Dengan ini menyatakan bahwa:"), Nomor (15 digit No. Ijazah:), Jenis "Ijazah"
+      // - Tanggal Dokumen: tetap "14 Juli 2026"
       const extracted = await extractIjazahMetadata(bytes, file.name);
 
       setCustomToken(extracted.token);
@@ -180,13 +199,13 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
       setFormData((prev) => ({
         ...prev,
         documentName: extracted.documentName,
-        documentType: 'Ijazah',
+        documentType: extracted.documentType,
         documentNumber: extracted.documentNumber,
         documentDate: extracted.documentDate,
         issuer: settings.issuer,
         signerName: settings.signerName,
         signerPosition: settings.signerPosition,
-        description: `Ijazah kelulusan siswa an. ${extracted.studentName} dengan barcode fisik eksisting.`
+        description: `${extracted.documentType} kelulusan siswa an. ${extracted.studentName} dengan barcode fisik eksisting.`
       }));
 
       setStep('form_and_preview');
@@ -194,25 +213,25 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     reader.readAsArrayBuffer(file);
   };
 
-  // Load sample diploma PDF and run auto-extraction
+  // Load sample diploma PDF (IJZ-) and run auto-extraction
   const handleLoadSamplePdf = async () => {
     const settings = getAppSettings();
     const sample = await generateSampleIjazahPdf();
-    const sampleFileName = 'DN-01_D-SD_0012345_Ahmad_Fauzi_sign.pdf';
+    const sampleFileName = 'IJZ-111202663419179_sign.pdf';
     setPdfBytes(sample);
     setFileName(sampleFileName);
     setFileSizeStr('74 KB');
 
     const extracted = await extractIjazahMetadata(sample, sampleFileName);
 
-    setCustomToken(extracted.token);
+    setCustomToken(extracted.token); // "IJZ-111202663419179"
     setLegacyBarcodeUrl(extracted.legacyBarcodeUrl);
 
     setFormData({
       documentName: extracted.documentName, // "Ijazah - Ahmad Fauzi"
-      documentType: 'Ijazah',
-      documentNumber: extracted.documentNumber, // "DN-01/D-SD/K13/23/0012345"
-      documentDate: extracted.documentDate, // "Gapuk, 15 Juni 2024"
+      documentType: extracted.documentType, // "Ijazah"
+      documentNumber: extracted.documentNumber, // "111202663419179"
+      documentDate: extracted.documentDate, // "14 Juli 2026"
       issuer: settings.issuer,
       signerName: settings.signerName,
       signerPosition: settings.signerPosition,
@@ -222,14 +241,51 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     setStep('form_and_preview');
   };
 
+  // Load sample transkrip PDF (TRN-) and run auto-extraction
+  const handleLoadSampleTranskripPdf = async () => {
+    const settings = getAppSettings();
+    const sample = await generateSampleTranskripPdf();
+    const sampleFileName = 'TRN-035_sign.pdf';
+    setPdfBytes(sample);
+    setFileName(sampleFileName);
+    setFileSizeStr('78 KB');
+
+    const extracted = await extractIjazahMetadata(sample, sampleFileName);
+
+    setCustomToken(extracted.token); // "TRN-035"
+    setLegacyBarcodeUrl(extracted.legacyBarcodeUrl);
+
+    setFormData({
+      documentName: extracted.documentName, // "Transkrip - AL-JAUZA'I"
+      documentType: extracted.documentType, // "Transkrip"
+      documentNumber: extracted.documentNumber, // "400.3.11.3/035/SDN1GPK/VI/2026"
+      documentDate: extracted.documentDate, // "14 Juli 2026"
+      issuer: settings.issuer,
+      signerName: settings.signerName,
+      signerPosition: settings.signerPosition,
+      description: `Transkrip nilai kelulusan siswa an. ${extracted.studentName} dengan barcode fisik eksisting.`
+    });
+
+    setStep('form_and_preview');
+  };
+
   // Render current PDF page to canvas preview
   useEffect(() => {
-    if (!pdfBytes || !canvasRef.current) return;
+    if (!pdfBytes || !canvasElement || step !== 'form_and_preview') return;
     const currentBytes = pdfBytes;
     let isMounted = true;
 
     async function renderPage() {
       try {
+        if (renderTaskRef.current) {
+          try {
+            renderTaskRef.current.cancel();
+          } catch {}
+          renderTaskRef.current = null;
+        }
+
+        setIsRenderingPreview(true);
+
         const loadingTask = pdfjsLib.getDocument({
           data: currentBytes.slice(0),
           useSystemFonts: true
@@ -239,31 +295,49 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
         setNumPages(doc.numPages);
 
         const page = await doc.getPage(currentPage);
-        if (!isMounted || !canvasRef.current) return;
+        if (!isMounted || !canvasElement) return;
 
-        const viewport = page.getViewport({ scale: 0.95 });
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        // Auto-scale to fit preview container crisply
+        const unscaledViewport = page.getViewport({ scale: 1.0 });
+        const targetWidth = 380;
+        const scale = Math.min(1.2, Math.max(0.65, targetWidth / unscaledViewport.width));
+        const viewport = page.getViewport({ scale });
 
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        canvasElement.width = viewport.width;
+        canvasElement.height = viewport.height;
 
-        await page.render({
+        const ctx = canvasElement.getContext('2d');
+        if (!ctx || !isMounted) return;
+        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+        const renderTask = page.render({
           canvasContext: ctx,
           viewport,
-          canvas
-        }).promise;
-      } catch (err) {
-        console.error('Failed to preview PDF', err);
+          canvas: canvasElement
+        });
+        renderTaskRef.current = renderTask;
+        await renderTask.promise;
+      } catch (err: any) {
+        if (err?.name !== 'RenderingCancelledException') {
+          console.error('Failed to preview PDF', err);
+        }
+      } finally {
+        if (isMounted) {
+          setIsRenderingPreview(false);
+        }
       }
     }
 
     renderPage();
     return () => {
       isMounted = false;
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {}
+      }
     };
-  }, [pdfBytes, currentPage]);
+  }, [pdfBytes, currentPage, step, canvasElement]);
 
   // Handle Save Legacy Document
   const handleSaveLegacyDocument = async () => {
@@ -393,16 +467,28 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
             </div>
           </div>
 
-          {/* Quick Sample Option */}
-          <div className="flex items-center justify-center gap-3 pt-2">
-            <span className="text-xs text-slate-500">Atau uji coba langsung alur ini:</span>
-            <button
-              onClick={handleLoadSamplePdf}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-purple-400 border border-slate-700 transition flex items-center gap-1.5"
-            >
-              <FileText className="w-4 h-4" />
-              <span>Gunakan Contoh Berkas Ijazah</span>
-            </button>
+          {/* Quick Sample Option: Both IJZ- and TRN- */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
+            <span className="text-xs text-slate-500">Uji coba simulasi otomatis:</span>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={handleLoadSamplePdf}
+                className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-purple-300 border border-purple-800/40 transition flex items-center gap-1.5 shadow-sm"
+              >
+                <FileText className="w-4 h-4 text-purple-400" />
+                <span>Contoh Ijazah (IJZ-)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLoadSampleTranskripPdf}
+                className="px-3.5 py-2 rounded-xl bg-indigo-950/70 hover:bg-indigo-900/80 text-xs font-semibold text-indigo-300 border border-indigo-700/50 transition flex items-center gap-1.5 shadow-sm"
+              >
+                <FileText className="w-4 h-4 text-indigo-400" />
+                <span>Contoh Transkrip (TRN-)</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -533,13 +619,21 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-slate-300 font-semibold">1. Nama Dokumen</label>
-                      <span className="text-[10px] text-purple-400 font-mono">Format: Ijazah - &#123;nama siswa&#125;</span>
+                      <span className="text-[10px] text-purple-400 font-mono">
+                        {formData.documentType === 'Transkrip'
+                          ? 'Format: Transkrip - {nama siswa}'
+                          : 'Format: Ijazah - {nama siswa}'}
+                      </span>
                     </div>
                     <input
                       type="text"
                       value={formData.documentName}
                       onChange={(e) => setFormData({ ...formData, documentName: e.target.value })}
-                      placeholder="Contoh: Ijazah - Ahmad Fauzi"
+                      placeholder={
+                        formData.documentType === 'Transkrip'
+                          ? "Contoh: Transkrip - AL-JAUZA'I"
+                          : 'Contoh: Ijazah - Ahmad Fauzi'
+                      }
                       className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition font-medium"
                     />
                   </div>
@@ -551,20 +645,30 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                         type="text"
                         value={formData.documentType}
                         onChange={(e) => setFormData({ ...formData, documentType: e.target.value })}
-                        placeholder="Contoh: Ijazah"
-                        className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition"
+                        placeholder="Ijazah / Transkrip"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition font-semibold text-purple-300"
                       />
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-slate-400 font-medium">3. Nomor Ijazah</label>
-                        <span className="text-[10px] text-purple-400 font-mono">Pojok Kanan Atas</span>
+                        <label className="text-slate-400 font-medium">
+                          3. Nomor {formData.documentType === 'Transkrip' ? 'Transkrip' : 'Ijazah'}
+                        </label>
+                        <span className="text-[10px] text-purple-400 font-mono">
+                          {formData.documentType === 'Transkrip'
+                            ? 'Setelah "Nomor :"'
+                            : '15 Digit (No. Ijazah:)'}
+                        </span>
                       </div>
                       <input
                         type="text"
                         value={formData.documentNumber}
                         onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })}
-                        placeholder="Contoh: DN-01/D-SD/K13/23/0012345"
+                        placeholder={
+                          formData.documentType === 'Transkrip'
+                            ? 'Contoh: 400.3.11.3/035/SDN1GPK/VI/2026'
+                            : 'Contoh: 111202663419179'
+                        }
                         className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition font-mono"
                       />
                     </div>
@@ -580,7 +684,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                         type="text"
                         value={formData.documentDate}
                         onChange={(e) => setFormData({ ...formData, documentDate: e.target.value })}
-                        placeholder="15 Juni 2024"
+                        placeholder="14 Juli 2026"
                         className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition"
                       />
                     </div>
@@ -750,8 +854,20 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                   )}
                 </div>
 
-                <div className="bg-slate-950 rounded-xl p-2 border border-slate-800 flex items-center justify-center max-h-[380px] overflow-auto">
-                  <canvas ref={canvasRef} className="rounded shadow max-w-full max-h-[360px]" />
+                <div className="relative bg-slate-950 rounded-xl p-3 border border-slate-800 flex items-center justify-center min-h-[360px] max-h-[500px] overflow-auto">
+                  {isRenderingPreview && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/75 backdrop-blur-xs rounded-xl z-10 text-xs text-purple-300 gap-2">
+                      <RefreshCw className="w-6 h-6 animate-spin text-purple-400" />
+                      <span>Memuat Pratinjau Dokumen...</span>
+                    </div>
+                  )}
+                  <canvas
+                    ref={(el) => {
+                      canvasRef.current = el;
+                      setCanvasElement(el);
+                    }}
+                    className="rounded shadow-xl max-w-full max-h-[480px] bg-white object-contain border border-slate-800"
+                  />
                 </div>
                 <p className="text-[10px] text-center text-slate-500">
                   Dokumen asli ini tidak ditempeli barcode tambahan.

@@ -583,7 +583,7 @@ export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
     borderWidth: 1,
     color: rgb(0.95, 0.98, 0.95),
   });
-  page.drawText('Nomor: DN-01/D-SD/K13/23/0012345', {
+  page.drawText('No. Ijazah: 111202663419179', {
     x: noBoxX + 10,
     y: noBoxY + 10,
     size: 10,
@@ -640,7 +640,7 @@ export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
   y -= 30;
 
   // Body text
-  const intro = 'Yang bertanda tangan di bawah ini, Kepala Sekolah Dasar Negeri 1 Gapuk menerangkan bahwa:';
+  const intro = 'Dengan ini menyatakan bahwa:';
   page.drawText(intro, {
     x: margin + 15,
     y,
@@ -692,7 +692,7 @@ export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
   let sigY = y - 60;
 
   // Tanggal Dokumen di tandatangani
-  page.drawText('Gapuk, 15 Juni 2024', {
+  page.drawText('Gapuk, 14 Juli 2026', {
     x: sigX,
     y: sigY,
     size: 9.5,
@@ -733,6 +733,210 @@ export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
     font: fontRegular,
     color: rgb(0.3, 0.3, 0.3),
   });
+
+  return await pdfDoc.save();
+}
+
+/**
+ * Generates an authentic Indonesian Transkrip Nilai SD PDF document
+ * matching the official template from SD Negeri 1 Gapuk:
+ * - Header: PEMERINTAH KABUPATEN LOMBOK TIMUR / SD NEGERI 1 GAPUK
+ * - Title: TRANSRKIP NILAI
+ * - Nomor: 400.3.11.3/009/SDN1GPK/VI/2026
+ * - Nama Lengkap : AL-JAUZA'I
+ * - Tanggal Kelulusan : 14 Juli 2026
+ * - Signature: Gapuk, 14 Juli 2026 / H. MASRUN, S.Pd.
+ */
+export async function generateSampleTranskripPdf(): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const a4Width = 595.28;
+  const a4Height = 841.89;
+
+  const page = pdfDoc.addPage([a4Width, a4Height]);
+  const margin = 45;
+  let y = a4Height - 40;
+
+  // Header / Kop
+  const h1 = 'PEMERINTAH KABUPATEN LOMBOK TIMUR';
+  const h1W = fontBold.widthOfTextAtSize(h1, 11);
+  page.drawText(h1, {
+    x: (a4Width - h1W) / 2,
+    y,
+    size: 11,
+    font: fontBold,
+    color: rgb(0, 0, 0),
+  });
+  y -= 14;
+
+  const h2 = 'UPT DINAS DIKBUD KECAMATAN SURALAGA';
+  const h2W = fontBold.widthOfTextAtSize(h2, 10);
+  page.drawText(h2, {
+    x: (a4Width - h2W) / 2,
+    y,
+    size: 10,
+    font: fontBold,
+    color: rgb(0, 0, 0),
+  });
+  y -= 16;
+
+  const h3 = 'SD NEGERI 1 GAPUK';
+  const h3W = fontBold.widthOfTextAtSize(h3, 14);
+  page.drawText(h3, {
+    x: (a4Width - h3W) / 2,
+    y,
+    size: 14,
+    font: fontBold,
+    color: rgb(0, 0, 0),
+  });
+  y -= 13;
+
+  const h4 = 'Alamat : Jalan Labuan Lombok - Desa Gapuk Desa Gapuk Kec. Suralaga Kab. Lombok Timur KP. 83659';
+  const h4W = fontRegular.widthOfTextAtSize(h4, 7.5);
+  page.drawText(h4, {
+    x: (a4Width - h4W) / 2,
+    y,
+    size: 7.5,
+    font: fontRegular,
+    color: rgb(0.2, 0.2, 0.2),
+  });
+  y -= 8;
+
+  // Divider line
+  page.drawLine({
+    start: { x: margin, y },
+    end: { x: a4Width - margin, y },
+    thickness: 1.5,
+    color: rgb(0, 0, 0),
+  });
+  y -= 24;
+
+  // Title: TRANSRKIP NILAI
+  const title = 'TRANSRKIP NILAI';
+  const titleW = fontBold.widthOfTextAtSize(title, 13);
+  page.drawText(title, {
+    x: (a4Width - titleW) / 2,
+    y,
+    size: 13,
+    font: fontBold,
+    color: rgb(0, 0, 0),
+  });
+  y -= 15;
+
+  const noStr = 'Nomor : 400.3.11.3/035/SDN1GPK/VI/2026';
+  const noW = fontRegular.widthOfTextAtSize(noStr, 10);
+  page.drawText(noStr, {
+    x: (a4Width - noW) / 2,
+    y,
+    size: 10,
+    font: fontRegular,
+    color: rgb(0, 0, 0),
+  });
+  y -= 30;
+
+  // Bio Info Block
+  const bio = [
+    { label: 'Nama Sekolah', val: 'SD NEGERI 1 GAPUK' },
+    { label: 'NPSN', val: '50202149' },
+    { label: 'Nama Lengkap', val: "AL-JAUZA'I" },
+    { label: 'Tempat, Tanggal Lahir', val: 'GAPUK, 25 November 2013' },
+    { label: 'Nomor Induk Siswa Nasional', val: '0138288565' },
+    { label: 'Tanggal Kelulusan', val: '14 Juli 2026' }
+  ];
+
+  for (const b of bio) {
+    page.drawText(b.label, {
+      x: margin + 10,
+      y,
+      size: 9.5,
+      font: fontRegular,
+      color: rgb(0, 0, 0),
+    });
+    page.drawText(`:   ${b.val}`, {
+      x: margin + 175,
+      y,
+      size: 9.5,
+      font: b.label === 'Nama Lengkap' ? fontBold : fontRegular,
+      color: rgb(0, 0, 0),
+    });
+    y -= 18;
+  }
+  y -= 15;
+
+  // Grades Table Header
+  const tableX = margin + 10;
+  const tableW = a4Width - (margin + 10) * 2;
+  page.drawRectangle({
+    x: tableX,
+    y: y - 20,
+    width: tableW,
+    height: 20,
+    borderColor: rgb(0, 0, 0),
+    borderWidth: 1,
+    color: rgb(0.95, 0.95, 0.95),
+  });
+  page.drawText('NO', { x: tableX + 8, y: y - 14, size: 8.5, font: fontBold, color: rgb(0, 0, 0) });
+  page.drawText('MATA PELAJARAN', { x: tableX + 90, y: y - 14, size: 8.5, font: fontBold, color: rgb(0, 0, 0) });
+  page.drawText('NILAI', { x: tableX + tableW - 60, y: y - 14, size: 8.5, font: fontBold, color: rgb(0, 0, 0) });
+  y -= 20;
+
+  const subjects = [
+    { no: '1.', name: 'Pendidikan Agama dan Budi Pekerti', val: '74,00' },
+    { no: '2.', name: 'Pendidikan Pancasila', val: '77,40' },
+    { no: '3.', name: 'Bahasa Indonesia', val: '74,88' },
+    { no: '4.', name: 'Matematika', val: '73,88' },
+    { no: '5.', name: 'Ilmu Pengetahuan Alam dan Sosial', val: '73,04' },
+    { no: '6.', name: 'Seni Musik', val: '79,16' },
+    { no: '7.', name: 'Pendidikan Jasmani, Olahraga dan Kesehatan', val: '78,40' },
+    { no: '8.', name: 'Bahasa Inggris', val: '84,80' }
+  ];
+
+  for (const s of subjects) {
+    page.drawRectangle({
+      x: tableX,
+      y: y - 18,
+      width: tableW,
+      height: 18,
+      borderColor: rgb(0, 0, 0),
+      borderWidth: 0.8,
+    });
+    page.drawText(s.no, { x: tableX + 8, y: y - 13, size: 8, font: fontRegular, color: rgb(0, 0, 0) });
+    page.drawText(s.name, { x: tableX + 40, y: y - 13, size: 8, font: fontRegular, color: rgb(0, 0, 0) });
+    page.drawText(s.val, { x: tableX + tableW - 55, y: y - 13, size: 8, font: fontRegular, color: rgb(0, 0, 0) });
+    y -= 18;
+  }
+
+  // Rata-rata row
+  page.drawRectangle({
+    x: tableX,
+    y: y - 18,
+    width: tableW,
+    height: 18,
+    borderColor: rgb(0, 0, 0),
+    borderWidth: 0.8,
+    color: rgb(0.97, 0.97, 0.97),
+  });
+  page.drawText('Rata-rata', { x: tableX + 160, y: y - 13, size: 8.5, font: fontBold, color: rgb(0, 0, 0) });
+  page.drawText('76,95', { x: tableX + tableW - 55, y: y - 13, size: 8.5, font: fontBold, color: rgb(0, 0, 0) });
+  y -= 45;
+
+  // Signature Block Bottom-Right
+  const sigX = a4Width - margin - 170;
+  page.drawText('Gapuk, 14 Juli 2026', { x: sigX, y, size: 9, font: fontRegular, color: rgb(0, 0, 0) });
+  y -= 13;
+  page.drawText('Kepala Sekolah,', { x: sigX, y, size: 9, font: fontRegular, color: rgb(0, 0, 0) });
+  y -= 55;
+  page.drawText('H. MASRUN, S.Pd.', { x: sigX, y, size: 9.5, font: fontBold, color: rgb(0, 0, 0) });
+  page.drawLine({
+    start: { x: sigX, y: y - 2 },
+    end: { x: sigX + 115, y: y - 2 },
+    thickness: 1,
+    color: rgb(0, 0, 0),
+  });
+  y -= 13;
+  page.drawText('NIP. 196812311988031141', { x: sigX, y, size: 8, font: fontRegular, color: rgb(0, 0, 0) });
 
   return await pdfDoc.save();
 }
