@@ -448,7 +448,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                   type="url"
                   value={editFormData.legacyBarcodeUrl}
                   onChange={(e) => setEditFormData({ ...editFormData, legacyBarcodeUrl: e.target.value })}
-                  placeholder="https://verifikasi-lama.../cek/..."
+                  placeholder="https://sdnegeri1gapuk.github.io/verifikasi-ijazah-v2/verifikasi.html?kode=..."
                   className="w-full bg-slate-900 border border-purple-700/60 focus:border-purple-400 rounded-lg px-3 py-2 text-white placeholder-slate-500 font-mono text-[11px]"
                 />
                 <p className="text-[10px] text-purple-300/80 leading-relaxed">

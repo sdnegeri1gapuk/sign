@@ -27,8 +27,12 @@ import {
   generateVerificationUrl
 } from '../../utils/electronicService';
 import { getAppSettings } from '../../utils/appSettings';
-import { generateSampleSKPPdf } from '../../utils/samplePdf';
+import { generateSampleIjazahPdf } from '../../utils/samplePdf';
 import { pdfjsLib } from '../../utils/pdfWorker';
+import {
+  extractIjazahMetadata,
+  formatLegacyBarcodeUrl
+} from '../../utils/ijazahExtractor';
 
 interface ElectronicImportLegacyProps {
   onDocumentImported?: (newDoc: VerifiedDocument) => void;
@@ -105,20 +109,25 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     }));
   };
 
+  // Update Token and synchronize Legacy Barcode URL
+  const handleCustomTokenChange = (val: string) => {
+    setCustomToken(val);
+    setLegacyBarcodeUrl(formatLegacyBarcodeUrl(val));
+  };
+
   // Attempt to extract a token/code from legacy URL automatically
   const handleLegacyUrlChange = (val: string) => {
     setLegacyBarcodeUrl(val);
     const trimmed = val.trim();
-    if (trimmed && !customToken) {
+    if (trimmed) {
       try {
-        // If it's a URL, extract last path segment or query param
         if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
           const urlObj = new URL(trimmed);
           const qToken =
+            urlObj.searchParams.get('kode') ||
             urlObj.searchParams.get('token') ||
             urlObj.searchParams.get('v') ||
-            urlObj.searchParams.get('id') ||
-            urlObj.searchParams.get('kode');
+            urlObj.searchParams.get('id');
           if (qToken) {
             setCustomToken(qToken.trim().toUpperCase());
             return;
@@ -126,7 +135,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
           const segments = urlObj.pathname.split('/').filter(Boolean);
           if (segments.length > 0) {
             const lastSegment = segments[segments.length - 1];
-            if (lastSegment && lastSegment.length >= 4 && lastSegment.length <= 30) {
+            if (lastSegment && lastSegment.length >= 4 && lastSegment.length <= 40) {
               setCustomToken(lastSegment.trim().toUpperCase());
               return;
             }
@@ -138,7 +147,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     }
   };
 
-  // Handle PDF file upload
+  // Handle PDF file upload with automatic Ijazah field extraction
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -149,22 +158,35 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     }
 
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const bytes = new Uint8Array(ev.target?.result as ArrayBuffer);
       setPdfBytes(bytes);
       setFileName(file.name);
       setFileSizeStr((file.size / (1024 * 1024)).toFixed(2) + ' MB');
 
-      const cleanBaseName = file.name.replace(/\.[^/.]+$/, '');
       const settings = getAppSettings();
+
+      // Ekstraksi otomatis:
+      // 1. Nama Dokumen ("Ijazah - {nama siswa}")
+      // 2. Nomor Ijazah (dari pojok kanan atas di file)
+      // 3. Tanggal Dokumen (tanggal penandatanganan)
+      // 4. Token Dokumen (dari judul berkas tanpa "_sign")
+      // 5. Link hasil scan barcode lama (format https://sdnegeri1gapuk.github.io/verifikasi-ijazah-v2/verifikasi.html?kode={token})
+      const extracted = await extractIjazahMetadata(bytes, file.name);
+
+      setCustomToken(extracted.token);
+      setLegacyBarcodeUrl(extracted.legacyBarcodeUrl);
+
       setFormData((prev) => ({
         ...prev,
-        documentName: cleanBaseName.toLowerCase().includes('ijazah')
-          ? cleanBaseName
-          : `Ijazah - ${cleanBaseName}`,
+        documentName: extracted.documentName,
+        documentType: 'Ijazah',
+        documentNumber: extracted.documentNumber,
+        documentDate: extracted.documentDate,
         issuer: settings.issuer,
         signerName: settings.signerName,
-        signerPosition: settings.signerPosition
+        signerPosition: settings.signerPosition,
+        description: `Ijazah kelulusan siswa an. ${extracted.studentName} dengan barcode fisik eksisting.`
       }));
 
       setStep('form_and_preview');
@@ -172,25 +194,31 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     reader.readAsArrayBuffer(file);
   };
 
-  // Load sample diploma PDF
+  // Load sample diploma PDF and run auto-extraction
   const handleLoadSamplePdf = async () => {
     const settings = getAppSettings();
-    const sample = await generateSampleSKPPdf();
+    const sample = await generateSampleIjazahPdf();
+    const sampleFileName = 'DN-01_D-SD_0012345_Ahmad_Fauzi_sign.pdf';
     setPdfBytes(sample);
-    setFileName('Ijazah_Kelulusan_Siswa_Contoh.pdf');
-    setFileSizeStr('86 KB');
+    setFileName(sampleFileName);
+    setFileSizeStr('74 KB');
+
+    const extracted = await extractIjazahMetadata(sample, sampleFileName);
+
+    setCustomToken(extracted.token);
+    setLegacyBarcodeUrl(extracted.legacyBarcodeUrl);
+
     setFormData({
-      documentName: 'Ijazah Kelulusan Siswa - Ahmad Fauzi',
+      documentName: extracted.documentName, // "Ijazah - Ahmad Fauzi"
       documentType: 'Ijazah',
-      documentNumber: 'DN-01/D-SD/K13/23/0098765',
-      documentDate: '15 Juni 2024',
+      documentNumber: extracted.documentNumber, // "DN-01/D-SD/K13/23/0012345"
+      documentDate: extracted.documentDate, // "Gapuk, 15 Juni 2024"
       issuer: settings.issuer,
       signerName: settings.signerName,
       signerPosition: settings.signerPosition,
-      description: 'Ijazah resmi kelulusan sekolah dasar tahun ajaran 2023/2024.'
+      description: 'Ijazah resmi kelulusan sekolah dasar dengan barcode fisik eksisting.'
     });
-    setLegacyBarcodeUrl('https://verifikasi-lama.kemdikbud.sch.id/cek/IJZ-98765');
-    setCustomToken('IJZ-98765');
+
     setStep('form_and_preview');
   };
 
@@ -450,52 +478,69 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                 </div>
 
                 <div className="space-y-3.5 text-xs">
-                  {/* Highlight Box: LINK HASIL SCAN BARCODE LAMA */}
-                  <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/40 to-indigo-950/40 border border-purple-500/40 shadow-inner space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-purple-200 font-bold flex items-center gap-1.5 text-xs">
-                        <LinkIcon className="w-4 h-4 text-purple-400" />
-                        <span>Link Hasil Scan Barcode pada Aplikasi Lama</span>
-                      </label>
-                      <span className="text-[10px] text-purple-300 bg-purple-900/60 px-2 py-0.5 rounded border border-purple-700/60 font-mono">
-                        Kunci Pengalihan
-                      </span>
-                    </div>
-
-                    <input
-                      type="url"
-                      value={legacyBarcodeUrl}
-                      onChange={(e) => handleLegacyUrlChange(e.target.value)}
-                      placeholder="Contoh: https://verifikasi-ijazah.kemdikbud.go.id/cek/IJZ-98234"
-                      className="w-full bg-slate-900 border border-purple-700/60 focus:border-purple-400 rounded-xl px-3 py-2.5 text-white font-mono text-[11px] placeholder-slate-500 shadow-inner"
-                    />
-
-                    <p className="text-[11px] text-slate-300 leading-relaxed">
-                      💡 <strong>Cara Penggunaan:</strong> Pindai barcode pada ijazah fisik Anda menggunakan smartphone, lalu salin/tempel tautan yang muncul ke dalam kotak di atas. Sistem kami akan mengenali link ini sehingga saat dicari/dialihkan akan langsung membuka hasil verifikasi di aplikasi baru ini.
-                    </p>
-
-                    {/* Token Identification */}
-                    <div className="pt-1.5 flex items-center gap-2">
-                      <span className="text-slate-400 text-[11px] font-medium">ID / Token Dokumen:</span>
+                  {/* Highlight Box: LINK HASIL SCAN BARCODE LAMA & TOKEN */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/40 to-indigo-950/40 border border-purple-500/40 shadow-inner space-y-3">
+                    {/* Token Identification (dari judul berkas tanpa _sign) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-purple-200 font-bold flex items-center gap-1.5 text-xs">
+                          <Hash className="w-3.5 h-3.5 text-purple-400" />
+                          <span>ID / Token Dokumen</span>
+                        </label>
+                        <span className="text-[10px] text-purple-300 bg-purple-900/60 px-2 py-0.5 rounded border border-purple-700/60 font-mono">
+                          Dari judul berkas tanpa "_sign"
+                        </span>
+                      </div>
                       <input
                         type="text"
                         value={customToken}
-                        onChange={(e) => setCustomToken(e.target.value.toUpperCase())}
-                        placeholder="Otomatis dari link lama atau buat kode unik"
-                        className="flex-1 bg-slate-950 border border-slate-700 focus:border-purple-500 rounded-lg px-2.5 py-1 text-purple-300 font-mono font-bold text-xs uppercase"
+                        onChange={(e) => handleCustomTokenChange(e.target.value)}
+                        placeholder="Contoh: DN-01_D-SD_0012345"
+                        className="w-full bg-slate-950 border border-purple-700/70 focus:border-purple-400 rounded-xl px-3 py-2 text-purple-200 font-mono font-bold text-xs"
                       />
+                      <p className="text-[10px] text-slate-400 mt-1">
+                        Diambil otomatis dari judul file PDF dengan menghilangkan kata <code>_sign</code> di belakangnya.
+                      </p>
+                    </div>
+
+                    {/* Link Hasil Scan Barcode Lama */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-purple-200 font-bold flex items-center gap-1.5 text-xs">
+                          <LinkIcon className="w-3.5 h-3.5 text-purple-400" />
+                          <span>Link Hasil Scan Barcode pada Aplikasi Lama</span>
+                        </label>
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/50 font-mono">
+                          Format Otomatis
+                        </span>
+                      </div>
+
+                      <input
+                        type="url"
+                        value={legacyBarcodeUrl}
+                        onChange={(e) => handleLegacyUrlChange(e.target.value)}
+                        placeholder="https://sdnegeri1gapuk.github.io/verifikasi-ijazah-v2/verifikasi.html?kode=..."
+                        className="w-full bg-slate-900 border border-purple-700/60 focus:border-purple-400 rounded-xl px-3 py-2.5 text-white font-mono text-[11px] placeholder-slate-500 shadow-inner"
+                      />
+
+                      <p className="text-[11px] text-slate-300 leading-relaxed mt-1">
+                        💡 Otomatis diisi dengan format: <code className="text-purple-300 font-mono text-[10px]">https://sdnegeri1gapuk.github.io/verifikasi-ijazah-v2/verifikasi.html?kode=&#123;token&#125;</code>. Nilai token otomatis mengikuti judul file ijazah yang di-upload.
+                      </p>
                     </div>
                   </div>
 
                   {/* Standard Metadata Fields */}
                   <div>
-                    <label className="text-slate-400 block mb-1 font-medium">1. Nama Dokumen</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-slate-300 font-semibold">1. Nama Dokumen</label>
+                      <span className="text-[10px] text-purple-400 font-mono">Format: Ijazah - &#123;nama siswa&#125;</span>
+                    </div>
                     <input
                       type="text"
                       value={formData.documentName}
                       onChange={(e) => setFormData({ ...formData, documentName: e.target.value })}
-                      placeholder="Contoh: Ijazah Kelulusan Siswa - Budi Santoso"
-                      className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition"
+                      placeholder="Contoh: Ijazah - Ahmad Fauzi"
+                      className="w-full bg-slate-800 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-white transition font-medium"
                     />
                   </div>
 
@@ -511,7 +556,10 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="text-slate-400 block mb-1 font-medium">3. Nomor Ijazah</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-400 font-medium">3. Nomor Ijazah</label>
+                        <span className="text-[10px] text-purple-400 font-mono">Pojok Kanan Atas</span>
+                      </div>
                       <input
                         type="text"
                         value={formData.documentNumber}
@@ -524,7 +572,10 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-slate-400 block mb-1 font-medium">4. Tanggal Dokumen</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-400 font-medium">4. Tanggal Dokumen</label>
+                        <span className="text-[10px] text-purple-400 font-mono">Tgl Tanda Tangan</span>
+                      </div>
                       <input
                         type="text"
                         value={formData.documentDate}

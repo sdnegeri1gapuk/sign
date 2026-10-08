@@ -44,9 +44,10 @@ export default function App() {
         }
       }
 
-      // 2. Check Search query params: e.g. ?v=..., ?verifikasi=..., ?barcode=..., ?legacy=...
+      // 2. Check Search query params: e.g. ?kode=..., ?v=..., ?verifikasi=..., ?barcode=..., ?legacy=...
       const params = new URLSearchParams(window.location.search);
       const queryToken =
+        params.get('kode') ||
         params.get('v') ||
         params.get('verifikasi') ||
         params.get('barcode') ||

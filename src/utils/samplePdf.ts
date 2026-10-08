@@ -530,3 +530,209 @@ export function generateDefaultSignature(name = 'Saripah, S.Pd.'): string {
 
   return canvas.toDataURL('image/png');
 }
+
+/**
+ * Generates an authentic Indonesian Ijazah Sekolah Dasar (SD) PDF document
+ * with real text layers matching the official Indonesian national diploma layout:
+ * - Top-right: Nomor Ijazah: DN-01/D-SD/K13/23/0012345
+ * - Title: SURAT TANDA TAMAT BELAJAR / IJAZAH SEKOLAH DASAR
+ * - Student Name: Ahmad Fauzi
+ * - Bottom-right: Gapuk, 15 Juni 2024 (signing date) & Kepala Sekolah signature
+ */
+export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const a4Width = 595.28;
+  const a4Height = 841.89;
+
+  const page = pdfDoc.addPage([a4Width, a4Height]);
+  const margin = 45;
+
+  // Outer decorative border
+  page.drawRectangle({
+    x: 20,
+    y: 20,
+    width: a4Width - 40,
+    height: a4Height - 40,
+    borderColor: rgb(0.2, 0.4, 0.25),
+    borderWidth: 2,
+    color: rgb(0.99, 1, 0.98),
+  });
+
+  // Inner border
+  page.drawRectangle({
+    x: 26,
+    y: 26,
+    width: a4Width - 52,
+    height: a4Height - 52,
+    borderColor: rgb(0.3, 0.55, 0.35),
+    borderWidth: 1,
+  });
+
+  // Top-Right: Nomor Ijazah Box
+  const noBoxX = a4Width - margin - 220;
+  const noBoxY = a4Height - margin - 35;
+  page.drawRectangle({
+    x: noBoxX,
+    y: noBoxY,
+    width: 220,
+    height: 30,
+    borderColor: rgb(0.2, 0.35, 0.2),
+    borderWidth: 1,
+    color: rgb(0.95, 0.98, 0.95),
+  });
+  page.drawText('Nomor: DN-01/D-SD/K13/23/0012345', {
+    x: noBoxX + 10,
+    y: noBoxY + 10,
+    size: 10,
+    font: fontBold,
+    color: rgb(0.1, 0.2, 0.1),
+  });
+
+  let y = a4Height - margin - 60;
+
+  // Kop / Garuda / Ministry
+  const kop1 = 'KEMENTERIAN PENDIDIKAN, KEBUDAYAAN, RISET, DAN TEKNOLOGI';
+  const kop1W = fontBold.widthOfTextAtSize(kop1, 10);
+  page.drawText(kop1, {
+    x: (a4Width - kop1W) / 2,
+    y,
+    size: 10,
+    font: fontBold,
+    color: rgb(0.15, 0.25, 0.15),
+  });
+  y -= 15;
+
+  const kop2 = 'REPUBLIK INDONESIA';
+  const kop2W = fontBold.widthOfTextAtSize(kop2, 11);
+  page.drawText(kop2, {
+    x: (a4Width - kop2W) / 2,
+    y,
+    size: 11,
+    font: fontBold,
+    color: rgb(0.1, 0.2, 0.1),
+  });
+  y -= 25;
+
+  // Title: IJAZAH SEKOLAH DASAR
+  const title = 'IJAZAH SEKOLAH DASAR';
+  const titleW = fontBold.widthOfTextAtSize(title, 16);
+  page.drawText(title, {
+    x: (a4Width - titleW) / 2,
+    y,
+    size: 16,
+    font: fontBold,
+    color: rgb(0.1, 0.35, 0.15),
+  });
+  y -= 16;
+
+  const subtitle = 'TAHUN PELAJARAN 2023/2024';
+  const subW = fontRegular.widthOfTextAtSize(subtitle, 10);
+  page.drawText(subtitle, {
+    x: (a4Width - subW) / 2,
+    y,
+    size: 10,
+    font: fontRegular,
+    color: rgb(0.2, 0.2, 0.2),
+  });
+  y -= 30;
+
+  // Body text
+  const intro = 'Yang bertanda tangan di bawah ini, Kepala Sekolah Dasar Negeri 1 Gapuk menerangkan bahwa:';
+  page.drawText(intro, {
+    x: margin + 15,
+    y,
+    size: 9.5,
+    font: fontRegular,
+    color: rgb(0.15, 0.15, 0.15),
+  });
+  y -= 30;
+
+  // Student Info Block
+  const studentRows = [
+    { label: 'nama', val: 'Ahmad Fauzi' },
+    { label: 'tempat dan tanggal lahir', val: 'Gapuk, 12 Mei 2012' },
+    { label: 'nama orang tua', val: 'Fauzi Rahman' },
+    { label: 'nomor induk siswa', val: '1234' },
+    { label: 'nomor induk siswa nasional', val: '0012345678' }
+  ];
+
+  for (const row of studentRows) {
+    page.drawText(row.label, {
+      x: margin + 25,
+      y,
+      size: 9.5,
+      font: fontRegular,
+      color: rgb(0.25, 0.25, 0.25),
+    });
+    page.drawText(`:  ${row.val}`, {
+      x: margin + 180,
+      y,
+      size: 10,
+      font: row.label === 'nama' ? fontBold : fontRegular,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+    y -= 22;
+  }
+  y -= 15;
+
+  const lulusText = 'LULUS dari satuan pendidikan setelah memenuhi seluruh kriteria kelulusan sesuai dengan ketentuan.';
+  page.drawText(lulusText, {
+    x: margin + 15,
+    y,
+    size: 9.5,
+    font: fontRegular,
+    color: rgb(0.15, 0.15, 0.15),
+  });
+
+  // Bottom-Right: Date and Signature of Kepala Sekolah
+  const sigX = a4Width - margin - 190;
+  let sigY = y - 60;
+
+  // Tanggal Dokumen di tandatangani
+  page.drawText('Gapuk, 15 Juni 2024', {
+    x: sigX,
+    y: sigY,
+    size: 9.5,
+    font: fontRegular,
+    color: rgb(0.15, 0.15, 0.15),
+  });
+  sigY -= 15;
+
+  page.drawText('Kepala Sekolah,', {
+    x: sigX,
+    y: sigY,
+    size: 9.5,
+    font: fontRegular,
+    color: rgb(0.15, 0.15, 0.15),
+  });
+  sigY -= 55;
+
+  // Pejabat name & NIP
+  page.drawText('H. Masrun, S.Pd', {
+    x: sigX,
+    y: sigY,
+    size: 10,
+    font: fontBold,
+    color: rgb(0.1, 0.1, 0.1),
+  });
+  page.drawLine({
+    start: { x: sigX, y: sigY - 2 },
+    end: { x: sigX + 130, y: sigY - 2 },
+    thickness: 1,
+    color: rgb(0.2, 0.2, 0.2),
+  });
+  sigY -= 14;
+
+  page.drawText('NIP. 19680512 199303 1 008', {
+    x: sigX,
+    y: sigY,
+    size: 8.5,
+    font: fontRegular,
+    color: rgb(0.3, 0.3, 0.3),
+  });
+
+  return await pdfDoc.save();
+}
