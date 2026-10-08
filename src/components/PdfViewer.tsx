@@ -191,8 +191,16 @@ const PdfPageCard: React.FC<{
       const clickX = e.clientX - container.left;
       const clickY = e.clientY - container.top;
 
-      const defaultW = 140;
-      const defaultH = 60;
+      let defaultW = 145;
+      let defaultH = 55;
+
+      const testImg = new Image();
+      testImg.src = activeSignatureTemplate.dataUrl;
+      if (testImg.naturalWidth && testImg.naturalHeight) {
+        const ratio = testImg.naturalWidth / testImg.naturalHeight;
+        defaultH = Math.max(25, Math.min(120, Math.round(defaultW / ratio)));
+      }
+
       const pdfX = Math.max(5, Math.min(pageSize.width - defaultW - 5, clickX / zoom - defaultW / 2));
       const pdfY = Math.max(5, Math.min(pageSize.height - defaultH - 5, clickY / zoom - defaultH / 2));
 
@@ -242,6 +250,13 @@ const PdfPageCard: React.FC<{
   const startResize = (e: React.MouseEvent, sig: SignatureItem) => {
     e.stopPropagation();
     onSelectSigId(sig.id);
+
+    const testImg = new Image();
+    testImg.src = sig.dataUrl;
+    const ratio = (testImg.naturalWidth && testImg.naturalHeight)
+      ? testImg.naturalWidth / testImg.naturalHeight
+      : (sig.width / sig.height);
+
     setDragState({
       sigId: sig.id,
       mode: 'resize',
@@ -251,7 +266,7 @@ const PdfPageCard: React.FC<{
       initialY: sig.y,
       initialW: sig.width,
       initialH: sig.height,
-      aspectRatio: sig.width / sig.height,
+      aspectRatio: ratio > 0 ? ratio : sig.width / sig.height,
     });
   };
 

@@ -171,8 +171,15 @@ export const ManualSignApp: React.FC = () => {
 
   // Quick stamp a specific template onto current page
   const handleQuickStampToCurrentPage = (tpl: SignatureTemplate) => {
-    const defaultW = 140;
-    const defaultH = 60;
+    let defaultW = 145;
+    let defaultH = 55;
+    const testImg = new Image();
+    testImg.src = tpl.dataUrl;
+    if (testImg.naturalWidth && testImg.naturalHeight) {
+      const ratio = testImg.naturalWidth / testImg.naturalHeight;
+      defaultH = Math.max(25, Math.min(120, Math.round(defaultW / ratio)));
+    }
+
     const targetPage = Math.min(Math.max(1, currentPage), numPages);
     const newSig: SignatureItem = {
       id: `sig_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,

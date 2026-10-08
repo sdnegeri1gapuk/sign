@@ -536,23 +536,39 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         {/* Modal Footer Controls */}
         <div className="px-6 py-4 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between">
           {step === 'choose' && (
-            <>
+            <div className="w-full flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm font-semibold transition"
+                className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold transition"
               >
                 Batal
               </button>
-              <button
-                type="button"
-                onClick={() => setStep('confirm')}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold shadow-lg shadow-indigo-600/30 transition hover:scale-[1.02]"
-              >
-                <span>Lanjutkan</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStep('confirm')}
+                  className="px-3.5 py-2.5 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-semibold transition hidden sm:inline-flex items-center gap-1.5"
+                >
+                  <span>Lihat Rincian</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartExport}
+                  className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-xs sm:text-sm font-bold shadow-lg transition hover:scale-[1.02] active:scale-[0.98] ${
+                    selectedMode === 'original'
+                      ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 shadow-indigo-600/30'
+                      : 'bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 shadow-amber-600/30'
+                  }`}
+                >
+                  <Download className="w-4 h-4" />
+                  <span>
+                    Simpan PDF ({selectedMode === 'original' ? 'Asli + TTD' : 'Gambar / Flattened'})
+                  </span>
+                </button>
+              </div>
+            </div>
           )}
 
           {step === 'confirm' && (

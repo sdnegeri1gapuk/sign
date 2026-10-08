@@ -27,11 +27,57 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
+ * Calculates the exact fitted drawing rectangle (equivalent to CSS object-contain)
+ * so that any signature placed maintains its true natural aspect ratio inside its box,
+ * perfectly matching what is displayed in the preview screen without distortion (tidak lonjong).
+ */
+export function getFittedSignatureBounds(
+  boxX: number,
+  boxY: number,
+  boxWidth: number,
+  boxHeight: number,
+  imageNaturalWidth: number,
+  imageNaturalHeight: number
+) {
+  if (!imageNaturalWidth || !imageNaturalHeight || !boxWidth || !boxHeight) {
+    return { x: boxX, y: boxY, width: boxWidth, height: boxHeight };
+  }
+
+  const imgRatio = imageNaturalWidth / imageNaturalHeight;
+  const boxRatio = boxWidth / boxHeight;
+
+  let drawW: number;
+  let drawH: number;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (boxRatio > imgRatio) {
+    // Box is wider than image aspect ratio: constrained by height
+    drawH = boxHeight;
+    drawW = boxHeight * imgRatio;
+    offsetX = (boxWidth - drawW) / 2;
+  } else {
+    // Box is taller than image aspect ratio: constrained by width
+    drawW = boxWidth;
+    drawH = boxWidth / imgRatio;
+    offsetY = (boxHeight - drawH) / 2;
+  }
+
+  return {
+    x: boxX + offsetX,
+    y: boxY + offsetY,
+    width: drawW,
+    height: drawH,
+  };
+}
+
+/**
  * =======================================================================
  * MODE 1: PDF Asli + Tanda Tangan
  * =======================================================================
  * - Preserves original PDF vector streams, fonts, original text layers, metadata
  * - Embeds signature as native image object at exact PDF coordinate points
+ * - Uses getFittedSignatureBounds to match object-contain aspect ratio
  * - Zero rasterization of document pages
  * - Text remains 100% selectable and copyable
  * - File naming: [NAMA_FILE_ASLI]_signed.pdf
@@ -73,13 +119,25 @@ export async function exportOriginalWithSignature(
         embeddedImageCache.set(sig.dataUrl, embeddedImage);
       }
 
+      // Calculate fitted signature bounds matching CSS object-contain in preview
+      const imgNaturalW = embeddedImage.width;
+      const imgNaturalH = embeddedImage.height;
+      const fit = getFittedSignatureBounds(
+        sig.x,
+        sig.y,
+        sig.width,
+        sig.height,
+        imgNaturalW,
+        imgNaturalH
+      );
+
       // Convert coordinate system:
       // Visual Editor: (0,0) is TOP-LEFT, y increases downwards
       // PDF-Lib / PDF standard: (0,0) is BOTTOM-LEFT, y increases upwards
-      // Signature bounds: visual top is `sig.y`, bottom is `sig.y + sig.height`
-      // Therefore, in PDF points:
-      const pdfX = sig.x;
-      const pdfY = pageHeight - (sig.y + sig.height);
+      const pdfX = fit.x;
+      const pdfY = pageHeight - (fit.y + fit.height);
+      const pdfW = fit.width;
+      const pdfH = fit.height;
 
       if (sig.rotation && sig.rotation !== 0) {
         // When rotated, draw with center rotation
@@ -88,26 +146,26 @@ export async function exportOriginalWithSignature(
         const sin = Math.sin(rad);
 
         // Calculate center point in PDF coordinates
-        const centerX = pdfX + sig.width / 2;
-        const centerY = pdfY + sig.height / 2;
+        const centerX = pdfX + pdfW / 2;
+        const centerY = pdfY + pdfH / 2;
 
         // Origin of drawing before rotation is bottom-left relative to center
-        const drawX = centerX - (sig.width / 2) * cos + (sig.height / 2) * sin;
-        const drawY = centerY - (sig.width / 2) * sin - (sig.height / 2) * cos;
+        const drawX = centerX - (pdfW / 2) * cos + (pdfH / 2) * sin;
+        const drawY = centerY - (pdfW / 2) * sin - (pdfH / 2) * cos;
 
         page.drawImage(embeddedImage, {
           x: drawX,
           y: drawY,
-          width: sig.width,
-          height: sig.height,
+          width: pdfW,
+          height: pdfH,
           rotate: degrees(-sig.rotation), // pdf-lib rotates counter-clockwise
         });
       } else {
         page.drawImage(embeddedImage, {
           x: pdfX,
           y: pdfY,
-          width: sig.width,
-          height: sig.height,
+          width: pdfW,
+          height: pdfH,
         });
       }
     }
@@ -131,13 +189,13 @@ export async function exportOriginalWithSignature(
 
 /**
  * =======================================================================
- * MODE 2: PDF Gambar / Flattened
+ * MODE 2: PDF Gambar / Flattened (flatpdf)
  * =======================================================================
  * - Renders each page to high-res raster image at minimum 300 DPI
  * - Merges signature image permanently into the page canvas raster
  * - Builds a completely brand-new PDF with ONE FLATTENED IMAGE PER PAGE
  * - Text layer is 100% destroyed / absent (non-selectable, non-copyable)
- * - Annotations, forms, vector objects are completely flattened
+ * - Signatures preserve exact aspect ratio (tidak lonjong)
  * - File naming: [NAMA_FILE_ASLI]_flattened_signed.pdf
  */
 export async function exportFlattenedPdf(
@@ -145,15 +203,18 @@ export async function exportFlattenedPdf(
   signatures: SignatureItem[],
   onProgress: ProgressCallback
 ): Promise<{ bytes: Uint8Array; fileName: string }> {
-  onProgress('Mempersiapkan PDF...', 5);
-  await new Promise((r) => setTimeout(r, 100));
+  onProgress('Mempersiapkan perenderan gambar PDF...', 5);
+  await new Promise((r) => setTimeout(r, 80));
 
   // Minimum 300 DPI rendering scale
   // Standard PDF 72 DPI -> 300 / 72 ≈ 4.1666667
   const DPI_SCALE = 300 / 72;
 
-  // Load via PDF.js for rendering
-  const loadingTask = pdfjsLib.getDocument({ data: originalPdfBytes.slice(0) });
+  // Load via PDF.js with system fonts enabled
+  const loadingTask = pdfjsLib.getDocument({
+    data: originalPdfBytes.slice(0),
+    useSystemFonts: true
+  });
   const pdfJsDoc = await loadingTask.promise;
   const totalPages = pdfJsDoc.numPages;
 
@@ -174,7 +235,7 @@ export async function exportFlattenedPdf(
   }
 
   for (let i = 1; i <= totalPages; i++) {
-    onProgress(`Memproses halaman ${i} dari ${totalPages}...`, 10 + Math.floor(((i - 1) / totalPages) * 80));
+    onProgress(`Merender halaman ${i} dari ${totalPages} menjadi gambar...`, 10 + Math.floor(((i - 1) / totalPages) * 80));
 
     const page = await pdfJsDoc.getPage(i);
     const originalViewport = page.getViewport({ scale: 1.0 });
@@ -188,7 +249,7 @@ export async function exportFlattenedPdf(
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(highResViewport.width);
     canvas.height = Math.round(highResViewport.height);
-    const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: false });
+    const ctx = canvas.getContext('2d');
 
     if (!ctx) {
       throw new Error('Gagal menginisialisasi canvas untuk rasterisasi PDF.');
@@ -198,7 +259,7 @@ export async function exportFlattenedPdf(
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // 1. Render PDF page to canvas
+    // 1. Render PDF page to canvas (convert all text/vectors to pure pixels)
     const renderContext = {
       canvasContext: ctx,
       viewport: highResViewport,
@@ -206,7 +267,7 @@ export async function exportFlattenedPdf(
     };
     await page.render(renderContext).promise;
 
-    // 2. Composite all signatures for this page directly onto the canvas
+    // 2. Composite all signatures for this page directly onto the canvas pixels
     const pageSignatures = signatures.filter((s) => s.pageNumber === i);
     const scaleRatio = canvas.width / originalWidth;
 
@@ -214,10 +275,21 @@ export async function exportFlattenedPdf(
       const img = loadedSignatureImages.get(sig.dataUrl);
       if (!img) continue;
 
-      const sigCanvasX = sig.x * scaleRatio;
-      const sigCanvasY = sig.y * scaleRatio;
-      const sigCanvasW = sig.width * scaleRatio;
-      const sigCanvasH = sig.height * scaleRatio;
+      const imgNaturalW = img.naturalWidth || img.width;
+      const imgNaturalH = img.naturalHeight || img.height;
+      const fit = getFittedSignatureBounds(
+        sig.x,
+        sig.y,
+        sig.width,
+        sig.height,
+        imgNaturalW,
+        imgNaturalH
+      );
+
+      const sigCanvasX = fit.x * scaleRatio;
+      const sigCanvasY = fit.y * scaleRatio;
+      const sigCanvasW = fit.width * scaleRatio;
+      const sigCanvasH = fit.height * scaleRatio;
 
       ctx.save();
       if (sig.rotation && sig.rotation !== 0) {
@@ -232,8 +304,8 @@ export async function exportFlattenedPdf(
       ctx.restore();
     }
 
-    // 3. Convert flattened canvas to JPEG at high quality
-    // JPEG strips any leftover alpha transparency and guarantees full rasterization
+    // 3. Convert flattened canvas to JPEG at high quality (0.92)
+    // Entire page is now 100% a single flat raster image, text cannot be selected or copied
     const flattenedJpgDataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
     // 4. Embed into brand new PDF as single image page
@@ -247,19 +319,15 @@ export async function exportFlattenedPdf(
       height: originalHeight,
     });
 
-    // Clean up canvas
-    canvas.width = 0;
-    canvas.height = 0;
-
     await new Promise((r) => setTimeout(r, 60));
   }
 
-  onProgress('Menyelesaikan PDF...', 95);
+  onProgress('Menyelesaikan berkas PDF gambar final...', 95);
   await new Promise((r) => setTimeout(r, 150));
 
   const finalBytes = await newPdfDoc.save();
 
-  onProgress('✓ PDF berhasil dibuat', 100);
+  onProgress('✓ PDF Gambar (Flattened) berhasil dibuat', 100);
 
   return {
     bytes: finalBytes,
