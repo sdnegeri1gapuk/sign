@@ -74,6 +74,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /app_settings/{settingId} {
+      // Allow read so all devices can sync and verify credentials
+      allow read: if true;
+      allow create, update: if isValidId(settingId);
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

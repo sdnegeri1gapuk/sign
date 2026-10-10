@@ -8,6 +8,7 @@ import { ExportModal } from '../ExportModal';
 import { SignatureModal } from '../SignatureModal';
 import { pdfjsLib } from '../../utils/pdfWorker';
 import { getDefaultSignaturesList } from '../../utils/defaultSignatures';
+import { getCachedSignatureDimensions } from '../../utils/pdfExport';
 import {
   loadSignatures,
   deleteSignatureOnline,
@@ -171,13 +172,16 @@ export const ManualSignApp: React.FC = () => {
 
   // Quick stamp a specific template onto current page
   const handleQuickStampToCurrentPage = (tpl: SignatureTemplate) => {
-    let defaultW = 145;
-    let defaultH = 55;
-    const testImg = new Image();
-    testImg.src = tpl.dataUrl;
-    if (testImg.naturalWidth && testImg.naturalHeight) {
-      const ratio = testImg.naturalWidth / testImg.naturalHeight;
-      defaultH = Math.max(25, Math.min(120, Math.round(defaultW / ratio)));
+    const dims = getCachedSignatureDimensions(tpl.dataUrl);
+    const ratio = dims ? dims.ratio : 2.5;
+    let defaultW: number;
+    let defaultH: number;
+    if (ratio >= 1) {
+      defaultW = Math.min(180, Math.max(90, Math.round(52 * ratio)));
+      defaultH = Math.round(defaultW / ratio);
+    } else {
+      defaultH = 75;
+      defaultW = Math.round(defaultH * ratio);
     }
 
     const targetPage = Math.min(Math.max(1, currentPage), numPages);

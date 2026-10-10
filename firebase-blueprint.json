@@ -210,6 +210,28 @@
         }
       },
       "required": ["id", "verificationToken", "timestamp"]
+    },
+    "AdminAccount": {
+      "title": "AdminAccount",
+      "description": "Administrator account credentials and settings synced in Cloud Firestore",
+      "type": "object",
+      "properties": {
+        "username": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Username for manager login"
+        },
+        "password": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Password for manager login"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Timestamp of last credential update"
+        }
+      },
+      "required": ["username", "password", "updatedAt"]
     }
   },
   "firestore": {
@@ -230,6 +252,12 @@
         "$ref": "VerificationLog"
       },
       "description": "Audit logs of verification scans"
+    },
+    "/app_settings/{settingId}": {
+      "schema": {
+        "$ref": "AdminAccount"
+      },
+      "description": "Global settings and admin account credentials synced across devices"
     }
   }
 }

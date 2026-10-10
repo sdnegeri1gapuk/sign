@@ -72,7 +72,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const outputFileName =
     selectedMode === 'original'
       ? `${baseName}_signed.pdf`
-      : `${baseName}_flattened_signed.pdf`;
+      : `${baseName}_flatpdf_signed.pdf`;
 
   const handleStartExport = async () => {
     setStep('exporting');
@@ -254,10 +254,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <div className="flex items-center gap-2.5">
                       <ImageIcon className="w-5 h-5 text-amber-400" />
                       <h3 className="font-bold text-base text-white">
-                        PDF Gambar / Flattened
+                        Flat PDF / PDF Gambar Solid
                       </h3>
                       <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        Terkunci / 300 DPI
+                        Anti-Copy / 300 DPI
                       </span>
                     </div>
 
@@ -564,7 +564,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 >
                   <Download className="w-4 h-4" />
                   <span>
-                    Simpan PDF ({selectedMode === 'original' ? 'Asli + TTD' : 'Gambar / Flattened'})
+                    {selectedMode === 'original'
+                      ? 'Simpan PDF Asli (Teks Aktif)'
+                      : 'Simpan Flat PDF (Gambar Solid - Anti Copy)'}
                   </span>
                 </button>
               </div>

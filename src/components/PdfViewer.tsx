@@ -10,6 +10,7 @@ import {
   Upload,
   AlertCircle,
   Plus,
+  Minus,
   Layers,
   ChevronUp,
   ChevronDown,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { pdfjsLib } from '../utils/pdfWorker';
 import { SignatureItem, SignatureTemplate } from '../types';
+import { loadImage, getCachedSignatureDimensions } from '../utils/pdfExport';
 
 interface PdfViewerProps {
   originalBytes: Uint8Array;
@@ -191,14 +193,17 @@ const PdfPageCard: React.FC<{
       const clickX = e.clientX - container.left;
       const clickY = e.clientY - container.top;
 
-      let defaultW = 145;
-      let defaultH = 55;
+      const dims = getCachedSignatureDimensions(activeSignatureTemplate.dataUrl);
+      const ratio = dims ? dims.ratio : 2.5;
 
-      const testImg = new Image();
-      testImg.src = activeSignatureTemplate.dataUrl;
-      if (testImg.naturalWidth && testImg.naturalHeight) {
-        const ratio = testImg.naturalWidth / testImg.naturalHeight;
-        defaultH = Math.max(25, Math.min(120, Math.round(defaultW / ratio)));
+      let defaultW: number;
+      let defaultH: number;
+      if (ratio >= 1) {
+        defaultW = Math.min(180, Math.max(90, Math.round(52 * ratio)));
+        defaultH = Math.round(defaultW / ratio);
+      } else {
+        defaultH = 75;
+        defaultW = Math.round(defaultH * ratio);
       }
 
       const pdfX = Math.max(5, Math.min(pageSize.width - defaultW - 5, clickX / zoom - defaultW / 2));
@@ -251,11 +256,8 @@ const PdfPageCard: React.FC<{
     e.stopPropagation();
     onSelectSigId(sig.id);
 
-    const testImg = new Image();
-    testImg.src = sig.dataUrl;
-    const ratio = (testImg.naturalWidth && testImg.naturalHeight)
-      ? testImg.naturalWidth / testImg.naturalHeight
-      : (sig.width / sig.height);
+    const dims = getCachedSignatureDimensions(sig.dataUrl);
+    const naturalRatio = dims ? dims.ratio : (sig.width / sig.height);
 
     setDragState({
       sigId: sig.id,
@@ -266,7 +268,7 @@ const PdfPageCard: React.FC<{
       initialY: sig.y,
       initialW: sig.width,
       initialH: sig.height,
-      aspectRatio: ratio > 0 ? ratio : sig.width / sig.height,
+      aspectRatio: naturalRatio > 0 ? naturalRatio : (sig.width / sig.height),
     });
   };
 
@@ -285,8 +287,8 @@ const PdfPageCard: React.FC<{
             const newY = Math.max(0, Math.min(pageSize.height - sig.height, dragState.initialY + deltaY));
             return { ...sig, x: Math.round(newX), y: Math.round(newY) };
           } else {
-            const newW = Math.max(45, Math.min(pageSize.width - sig.x, dragState.initialW + deltaX));
-            const newH = Math.max(20, newW / dragState.aspectRatio);
+            const newW = Math.max(35, Math.min(pageSize.width - sig.x, dragState.initialW + deltaX));
+            const newH = Math.max(15, Math.round(newW / dragState.aspectRatio));
             return { ...sig, width: Math.round(newW), height: Math.round(newH) };
           }
         })
@@ -322,6 +324,21 @@ const PdfPageCard: React.FC<{
     );
   };
 
+  const handleScaleSig = (id: string, factor: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onUpdateAllSignatures(
+      allSignatures.map((s) => {
+        if (s.id !== id) return s;
+        const dims = getCachedSignatureDimensions(s.dataUrl);
+        const ratio = dims ? dims.ratio : (s.width / s.height);
+        const newW = Math.max(35, Math.min(pageSize.width - s.x, Math.round(s.width * factor)));
+        const newH = Math.max(15, Math.round(newW / ratio));
+        return { ...s, width: newW, height: newH };
+      })
+    );
+  };
+
   const pageWidthScaled = pageSize.width * zoom;
   const pageHeightScaled = pageSize.height * zoom;
 
@@ -354,8 +371,17 @@ const PdfPageCard: React.FC<{
           <button
             type="button"
             onClick={() => {
-              const defaultW = 140;
-              const defaultH = 60;
+              const dims = getCachedSignatureDimensions(activeSignatureTemplate.dataUrl);
+              const ratio = dims ? dims.ratio : 2.5;
+              let defaultW: number;
+              let defaultH: number;
+              if (ratio >= 1) {
+                defaultW = Math.min(180, Math.max(90, Math.round(52 * ratio)));
+                defaultH = Math.round(defaultW / ratio);
+              } else {
+                defaultH = 75;
+                defaultW = Math.round(defaultH * ratio);
+              }
               const centerPdfX = Math.round((pageSize.width - defaultW) / 2);
               const centerPdfY = Math.round((pageSize.height - defaultH) / 2);
 
@@ -486,29 +512,50 @@ const PdfPageCard: React.FC<{
                 <div
                   onMouseDown={(e) => e.stopPropagation()}
                   onTouchStart={(e) => e.stopPropagation()}
-                  className="absolute -top-9 left-0 right-0 flex items-center justify-between pointer-events-auto z-30"
+                  className="absolute -top-10 left-0 flex items-center gap-1.5 pointer-events-auto z-30 bg-slate-900/95 text-white px-2 py-1 rounded-lg shadow-xl border border-slate-700 backdrop-blur-xs select-none"
                 >
-                  <div className="bg-slate-900 text-white text-[10px] font-mono px-2 py-0.5 rounded shadow border border-slate-700 truncate max-w-[150px]">
-                    {sig.label || 'Tanda Tangan'} ({sig.x}, {sig.y} pt)
+                  <div className="text-[10px] font-mono font-semibold text-indigo-300 pr-1.5 border-r border-slate-700/80 truncate max-w-[130px]">
+                    {sig.label || 'TTD'}
+                  </div>
+                  <div className="text-[10px] font-mono text-emerald-400 font-medium pr-1.5 border-r border-slate-700/80">
+                    {Math.round(sig.width)}×{Math.round(sig.height)} pt
                   </div>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => handleScaleSig(sig.id, 0.9, e)}
+                      className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                      title="Perkecil ukuran tanda tangan (-10%)"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => handleScaleSig(sig.id, 1.1, e)}
+                      className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                      title="Perbesar ukuran tanda tangan (+10%)"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => handleRotateSig(sig.id, e)}
-                      className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 shadow"
+                      className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
                       title="Putar 90°"
                     >
-                      <RotateCw className="w-3.5 h-3.5" />
+                      <RotateCw className="w-3 h-3" />
                     </button>
                     <button
                       type="button"
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => handleDeleteSig(sig.id, e)}
-                      className="p-1 rounded bg-rose-600 hover:bg-rose-500 text-white border border-rose-400 shadow transition cursor-pointer"
+                      className="p-1 rounded bg-rose-600 hover:bg-rose-500 text-white border border-rose-400 transition ml-0.5"
                       title="Hapus tanda tangan"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
                 </div>

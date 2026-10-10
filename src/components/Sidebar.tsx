@@ -301,7 +301,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <strong className="text-slate-200">1. PDF Asli + TTD:</strong> Teks formulir tetap dapat diseleksi & dicopy (vektor utuh).
             </div>
             <div>
-              <strong className="text-slate-200">2. PDF Flattened:</strong> Seluruh halaman dirender menjadi gambar 300 DPI solid, anti-modifikasi.
+              <strong className="text-slate-200">2. Flat PDF (Gambar Solid):</strong> Seluruh halaman dirender menjadi gambar 300 DPI solid, anti-modifikasi & teks terkunci total (tidak dapat dicopy).
             </div>
           </div>
         </div>

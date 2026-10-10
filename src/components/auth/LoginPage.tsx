@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   Lock,
@@ -9,12 +9,16 @@ import {
   AlertCircle,
   QrCode,
   KeyRound,
-  FileSignature
+  FileSignature,
+  RefreshCw
 } from 'lucide-react';
 import {
   verifyAndLogin,
+  verifyAndLoginAsync,
   getStoredUsername,
-  setLoginSession
+  setLoginSession,
+  syncCredentialsFromCloud,
+  subscribeToCloudCredentials
 } from '../../utils/adminAuth';
 import { signInWithGoogle } from '../../utils/firebase';
 
@@ -27,13 +31,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   onLoginSuccess,
   onOpenPublicVerify
 }) => {
-  const [username, setUsername] = useState<string>('admin');
+  const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState<boolean>(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Sync latest cloud credentials when login page appears
+  useEffect(() => {
+    syncCredentialsFromCloud().catch(console.warn);
+    const unsub = subscribeToCloudCredentials();
+    return () => unsub();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
@@ -42,11 +54,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       return;
     }
 
-    const success = verifyAndLogin(username.trim(), password);
-    if (success) {
-      onLoginSuccess();
-    } else {
-      setErrorMsg('Username atau Password salah! Periksa kembali data login Anda.');
+    setIsSubmitting(true);
+    try {
+      // Authenticate with Cloud Firestore credentials
+      const success = await verifyAndLoginAsync(username.trim(), password);
+      if (success) {
+        onLoginSuccess();
+      } else {
+        setErrorMsg('Username atau Password salah! Periksa kembali data login Anda.');
+      }
+    } catch {
+      // Fallback check against memory/local storage
+      const fallbackSuccess = verifyAndLogin(username.trim(), password);
+      if (fallbackSuccess) {
+        onLoginSuccess();
+      } else {
+        setErrorMsg('Username atau Password salah! Periksa kembali data login Anda.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -62,7 +88,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     } catch (err: any) {
       console.warn('Google login failed:', err);
       setErrorMsg(
-        'Login Google dibatalkan atau terjadi kendala. Anda dapat masuk menggunakan Username & Password bawaan.'
+        'Login Google dibatalkan atau terjadi kendala. Anda dapat masuk menggunakan Username & Password pengelola.'
       );
     } finally {
       setIsGoogleLoading(false);
@@ -97,7 +123,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           <div className="text-left">
             <span className="text-xs font-bold text-white block">Akses Pengelola Terlindungi</span>
             <span className="text-[10px] text-slate-400 block leading-tight">
-              Wajib login untuk membuat, mengedit, atau menghapus dokumen.
+              Wajib login untuk membuat, mengedit, atau mengelola dokumen.
             </span>
           </div>
         </div>
@@ -120,6 +146,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Masukkan username..."
+                autoComplete="username"
                 className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-xl py-2.5 pl-10 pr-3 text-white transition text-sm"
               />
               <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
@@ -134,6 +161,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Masukkan password..."
+                autoComplete="current-password"
                 className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-xl py-2.5 pl-10 pr-10 text-white transition text-sm"
               />
               <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
@@ -149,10 +177,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({
 
           <button
             type="submit"
-            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2"
+            disabled={isSubmitting}
+            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            <LogIn className="w-4 h-4" />
-            <span>Masuk ke Sistem</span>
+            {isSubmitting ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Memverifikasi Akun Cloud...</span>
+              </>
+            ) : (
+              <>
+                <LogIn className="w-4 h-4" />
+                <span>Masuk ke Sistem</span>
+              </>
+            )}
           </button>
         </form>
 
@@ -168,8 +206,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         <button
           type="button"
           onClick={handleGoogleLogin}
-          disabled={isGoogleLoading}
-          className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 font-semibold text-xs transition flex items-center justify-center gap-2.5 shadow"
+          disabled={isGoogleLoading || isSubmitting}
+          className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-750 border border-slate-700 text-slate-200 font-semibold text-xs transition flex items-center justify-center gap-2.5 shadow disabled:opacity-60"
         >
           <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
             <path
@@ -191,17 +229,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </svg>
           <span>{isGoogleLoading ? 'Menghubungkan...' : 'Masuk dengan Akun Google'}</span>
         </button>
-
-        {/* Default Credentials Info Box */}
-        <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 space-y-1 text-center">
-          <p className="font-semibold text-slate-300">🔑 Akun Pengelola Bawaan:</p>
-          <p className="font-mono text-emerald-400 font-medium">
-            Username: <strong>admin</strong> • Password: <strong>admin123</strong>
-          </p>
-          <p className="text-[10px] text-slate-500">
-            (Password dapat diubah kapan saja di menu Pengaturan)
-          </p>
-        </div>
 
         {/* Public Verification Shortcut */}
         <div className="pt-1 text-center">
