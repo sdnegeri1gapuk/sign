@@ -37,11 +37,11 @@ export const ElectronicUploadIjazah: React.FC<ElectronicUploadIjazahProps> = ({
             <div className="text-left">
               <span className="block font-bold">Ijazah Baru (Dengan Barcode / QR)</span>
               <span className="block text-[10px] text-emerald-200/80 font-normal">
-                Ekstrak Data & Tempel Barcode Baru
+                Ekstrak Data & Tempel Barcode Baru • Termasuk Batch Signing
               </span>
             </div>
             <span className="ml-1 px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 text-[9px] font-bold uppercase tracking-wider">
-              Prioritas
+              Prioritas & Batch
             </span>
           </button>
 

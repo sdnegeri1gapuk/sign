@@ -531,15 +531,31 @@ export function generateDefaultSignature(name = 'Saripah, S.Pd.'): string {
   return canvas.toDataURL('image/png');
 }
 
+export interface SampleIjazahOverrides {
+  studentName?: string;
+  documentNumber?: string;
+  birthInfo?: string;
+  nis?: string;
+  nisn?: string;
+  dateStr?: string;
+}
+
 /**
  * Generates an authentic Indonesian Ijazah Sekolah Dasar (SD) PDF document
  * with real text layers matching the official Indonesian national diploma layout:
- * - Top-right: Nomor Ijazah: DN-01/D-SD/K13/23/0012345
+ * - Top-right: Nomor Ijazah: DN-01/D-SD/K13/23/0012345 or custom
  * - Title: SURAT TANDA TAMAT BELAJAR / IJAZAH SEKOLAH DASAR
- * - Student Name: Ahmad Fauzi
- * - Bottom-right: Gapuk, 15 Juni 2024 (signing date) & Kepala Sekolah signature
+ * - Student Name: Ahmad Fauzi or custom
+ * - Bottom-right: Kabupaten Lombok Timur, 14 Juli 2026 (signing date) & Kepala Sekolah signature
  */
-export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
+export async function generateSampleIjazahPdf(overrides?: SampleIjazahOverrides): Promise<Uint8Array> {
+  const studentName = overrides?.studentName || 'Ahmad Fauzi';
+  const documentNumber = overrides?.documentNumber || '111202663419179';
+  const birthInfo = overrides?.birthInfo || 'Gapuk, 12 Mei 2012';
+  const nis = overrides?.nis || '1234';
+  const nisn = overrides?.nisn || '0012345678';
+  const dateStr = overrides?.dateStr || 'Kabupaten Lombok Timur, 14 Juli 2026';
+
   const pdfDoc = await PDFDocument.create();
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -583,7 +599,7 @@ export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
     borderWidth: 1,
     color: rgb(0.95, 0.98, 0.95),
   });
-  page.drawText('No. Ijazah: 111202663419179', {
+  page.drawText(`No. Ijazah: ${documentNumber}`, {
     x: noBoxX + 10,
     y: noBoxY + 10,
     size: 10,
@@ -652,11 +668,11 @@ export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
 
   // Student Info Block
   const studentRows = [
-    { label: 'nama', val: 'Ahmad Fauzi' },
-    { label: 'tempat dan tanggal lahir', val: 'Gapuk, 12 Mei 2012' },
+    { label: 'nama', val: studentName },
+    { label: 'tempat dan tanggal lahir', val: birthInfo },
     { label: 'nama orang tua', val: 'Fauzi Rahman' },
-    { label: 'nomor induk siswa', val: '1234' },
-    { label: 'nomor induk siswa nasional', val: '0012345678' }
+    { label: 'nomor induk siswa', val: nis },
+    { label: 'nomor induk siswa nasional', val: nisn }
   ];
 
   for (const row of studentRows) {
@@ -692,7 +708,7 @@ export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
   let sigY = y - 60;
 
   // Tanggal Dokumen di tandatangani
-  page.drawText('Kabupaten Lombok Timur, 14 Juli 2026', {
+  page.drawText(dateStr, {
     x: sigX,
     y: sigY,
     size: 9.5,
@@ -939,4 +955,61 @@ export async function generateSampleTranskripPdf(): Promise<Uint8Array> {
   page.drawText('NIP. 196812311988031141', { x: sigX, y, size: 8, font: fontRegular, color: rgb(0, 0, 0) });
 
   return await pdfDoc.save();
+}
+
+/**
+ * Generates an array of 3 distinct sample Ijazah PDFs with different student names and numbers
+ * for testing the Batch Signing feature.
+ */
+export async function generateSampleBatchIjazahPdfs(): Promise<
+  { fileName: string; bytes: Uint8Array; studentName: string; documentNumber: string }[]
+> {
+  const samples = [
+    {
+      fileName: 'IJZ-111202663419179_sign.pdf',
+      studentName: 'Ahmad Fauzi',
+      documentNumber: '111202663419179',
+      birthInfo: 'Gapuk, 12 Mei 2012',
+      nis: '1234',
+      nisn: '0012345678',
+      dateStr: 'Kabupaten Lombok Timur, 14 Juli 2026'
+    },
+    {
+      fileName: 'IJZ-111202663419180_sign.pdf',
+      studentName: 'Siti Nurhaliza',
+      documentNumber: '111202663419180',
+      birthInfo: 'Selong, 08 Agustus 2012',
+      nis: '1235',
+      nisn: '0012345679',
+      dateStr: 'Kabupaten Lombok Timur, 14 Juli 2026'
+    },
+    {
+      fileName: 'IJZ-111202663419181_sign.pdf',
+      studentName: 'Muhammad Rizky',
+      documentNumber: '111202663419181',
+      birthInfo: 'Aikmel, 23 November 2012',
+      nis: '1236',
+      nisn: '0012345680',
+      dateStr: 'Kabupaten Lombok Timur, 15 Juli 2026'
+    }
+  ];
+
+  const results = [];
+  for (const s of samples) {
+    const bytes = await generateSampleIjazahPdf({
+      studentName: s.studentName,
+      documentNumber: s.documentNumber,
+      birthInfo: s.birthInfo,
+      nis: s.nis,
+      nisn: s.nisn,
+      dateStr: s.dateStr
+    });
+    results.push({
+      fileName: s.fileName,
+      bytes,
+      studentName: s.studentName,
+      documentNumber: s.documentNumber
+    });
+  }
+  return results;
 }

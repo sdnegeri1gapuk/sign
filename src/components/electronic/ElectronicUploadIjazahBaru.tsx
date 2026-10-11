@@ -48,6 +48,7 @@ import {
   exportOriginalWithQrCode,
   exportFlattenedWithQrCode
 } from '../../utils/pdfElectronicExport';
+import { ElectronicBatchSigningIjazah } from './ElectronicBatchSigningIjazah';
 
 interface ElectronicUploadIjazahBaruProps {
   onDocumentImported?: (newDoc: VerifiedDocument) => void;
@@ -60,7 +61,10 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
   onGoToSavedDocs,
   onOpenVerification
 }) => {
-  // Workflow Step: 'upload' | 'editor' | 'success'
+  // Workflow Mode: 'single' (Dokumen Satuan) | 'batch' (Batch Signing / Massal)
+  const [mode, setMode] = useState<'single' | 'batch'>('single');
+
+  // Workflow Step for single mode: 'upload' | 'editor' | 'success'
   const [step, setStep] = useState<'upload' | 'editor' | 'success'>('upload');
 
   // PDF File info
@@ -224,9 +228,16 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
 
   // Handle PDF file upload with full automatic Ijazah field extraction
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
+    // Jika pengguna memilih banyak berkas sekaligus, otomatis alihkan ke Batch Signing
+    if (files.length > 1) {
+      setMode('batch');
+      return;
+    }
+
+    const file = files[0];
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       alert('Mohon pilih berkas dengan format PDF (.pdf)');
       return;
@@ -677,45 +688,133 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
 
   return (
     <div className="space-y-6">
-      {/* STEP 1: INITIAL UPLOAD VIEW */}
-      {step === 'upload' && (
-        <div className="max-w-3xl mx-auto space-y-6">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white mx-auto shadow-lg shadow-emerald-500/20">
-              <GraduationCap className="w-8 h-8" />
+      {/* Mode Switcher: Dokumen Tunggal vs Batch Signing */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-2 flex flex-wrap items-center justify-between gap-3 shadow-xl">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMode('single')}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2.5 ${
+              mode === 'single'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 ring-1 ring-emerald-400/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4 text-emerald-300" />
+            <div className="text-left">
+              <span className="block font-bold">Dokumen Tunggal</span>
+              <span className="block text-[10px] text-emerald-200/80 font-normal">
+                Editor Visual & Geser Barcode
+              </span>
             </div>
+          </button>
 
-            <div className="space-y-2">
-              <h3 className="text-xl font-bold text-white tracking-wide">
-                Upload & Tempel Barcode Ijazah Baru
-              </h3>
-              <p className="text-sm text-slate-400 max-w-lg mx-auto">
-                Unggah berkas PDF Ijazah untuk diekstrak otomatis datanya (Nomor, Tanggal Tanda Tangan, Nama Siswa), dibuatkan Barcode Verifikasi resmi, dan ditempelkan langsung pada posisi lembar ijazah.
-              </p>
+          <button
+            type="button"
+            onClick={() => setMode('batch')}
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2.5 ${
+              mode === 'batch'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 ring-1 ring-emerald-400/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-teal-300" />
+            <div className="text-left">
+              <span className="block font-bold">Batch Signing (Tanda Tangan Massal)</span>
+              <span className="block text-[10px] text-teal-200/80 font-normal">
+                Banyak Berkas Sekaligus • Metadata Masing-Masing Siswa
+              </span>
             </div>
+            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 text-[9px] font-bold uppercase tracking-wider">
+              Massal
+            </span>
+          </button>
+        </div>
 
-            {/* Drag & Drop File Zone */}
-            <label className="border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-2xl p-8 block cursor-pointer transition bg-slate-950/40 hover:bg-slate-950/70 group">
-              <input
-                type="file"
-                accept=".pdf,application/pdf"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition">
-                  <Upload className="w-6 h-6" />
+        <div className="hidden lg:flex items-center gap-2 text-xs text-slate-400 px-3">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span>
+            {mode === 'single'
+              ? 'Mode Satuan: Sesuaikan posisi barcode per lembar'
+              : 'Mode Batch: Ekstraksi & tanda tangani serentak'}
+          </span>
+        </div>
+      </div>
+
+      {mode === 'batch' ? (
+        <ElectronicBatchSigningIjazah
+          onDocumentImported={onDocumentImported}
+          onGoToSavedDocs={onGoToSavedDocs}
+          onOpenVerification={onOpenVerification}
+          onSwitchToSingleMode={() => setMode('single')}
+        />
+      ) : (
+        <>
+          {/* STEP 1: INITIAL UPLOAD VIEW */}
+          {step === 'upload' && (
+            <div className="max-w-3xl mx-auto space-y-6">
+              {/* Batch Signing Prompt Banner */}
+              <div className="bg-gradient-to-r from-emerald-950/40 via-teal-950/30 to-slate-900 border border-emerald-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-xs">
+                      Punya banyak berkas ijazah untuk ditandatangani sekaligus?
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Gunakan fitur <strong>Batch Signing</strong> untuk memproses beberapa dokumen sekaligus dengan metadata siswa masing-masing secara bersamaan.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-slate-200 text-sm">
-                    Klik untuk pilih berkas PDF Ijazah
-                  </p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Mendukung berkas ijazah atau transkrip format .pdf
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setMode('batch')}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition shrink-0 flex items-center gap-1.5"
+                >
+                  <span>Buka Batch Signing</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
-            </label>
+
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white mx-auto shadow-lg shadow-emerald-500/20">
+                  <GraduationCap className="w-8 h-8" />
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold text-white tracking-wide">
+                    Upload & Tempel Barcode Ijazah Baru
+                  </h3>
+                  <p className="text-sm text-slate-400 max-w-lg mx-auto">
+                    Unggah berkas PDF Ijazah untuk diekstrak otomatis datanya (Nomor, Tanggal Tanda Tangan, Nama Siswa), dibuatkan Barcode Verifikasi resmi, dan ditempelkan langsung pada posisi lembar ijazah.
+                  </p>
+                </div>
+
+                {/* Drag & Drop File Zone */}
+                <label className="border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-2xl p-8 block cursor-pointer transition bg-slate-950/40 hover:bg-slate-950/70 group">
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,application/pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-200 text-sm">
+                        Klik untuk pilih berkas PDF Ijazah
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Mendukung berkas ijazah format .pdf (Pilih 1 untuk editor visual, atau beberapa untuk Batch Signing)
+                      </p>
+                    </div>
+                  </div>
+                </label>
 
             {/* Quick Sample Buttons */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 text-center space-y-3">
@@ -1452,6 +1551,8 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );
