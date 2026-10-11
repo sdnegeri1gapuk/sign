@@ -16,7 +16,7 @@ import {
 } from '../../utils/electronicService';
 import { ElectronicDashboard } from './ElectronicDashboard';
 import { ElectronicCreateDoc } from './ElectronicCreateDoc';
-import { ElectronicImportLegacy } from './ElectronicImportLegacy';
+import { ElectronicUploadIjazah } from './ElectronicUploadIjazah';
 import { ElectronicSavedDocs } from './ElectronicSavedDocs';
 import { ElectronicPublicVerify } from './ElectronicPublicVerify';
 import { ElectronicSettings } from './ElectronicSettings';
@@ -97,17 +97,17 @@ export const ElectronicSignApp: React.FC<ElectronicSignAppProps> = ({
             <span>Buat Dokumen</span>
           </button>
 
-          {/* Upload Ijazah Lama (Barcode Eksisting / Skenario B) */}
+          {/* Upload Ijazah (Ijazah Baru & Ijazah Lama) */}
           <button
-            onClick={() => setActiveSubMenu('import_legacy')}
+            onClick={() => setActiveSubMenu('upload_ijazah')}
             className={`px-3.5 py-2 rounded-xl font-medium transition flex items-center gap-2 ${
-              activeSubMenu === 'import_legacy'
+              activeSubMenu === 'upload_ijazah' || activeSubMenu === 'import_legacy'
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25'
                 : 'text-purple-300 hover:text-white hover:bg-purple-950/40 border border-purple-800/30'
             }`}
           >
             <GraduationCap className="w-4 h-4" />
-            <span>Upload Ijazah Lama</span>
+            <span>Upload Ijazah</span>
           </button>
 
           {/* Dokumen Tersimpan */}
@@ -178,8 +178,8 @@ export const ElectronicSignApp: React.FC<ElectronicSignAppProps> = ({
           />
         )}
 
-        {activeSubMenu === 'import_legacy' && (
-          <ElectronicImportLegacy
+        {(activeSubMenu === 'upload_ijazah' || activeSubMenu === 'import_legacy') && (
+          <ElectronicUploadIjazah
             onDocumentImported={handleDocumentCreated}
             onGoToSavedDocs={() => setActiveSubMenu('saved')}
             onOpenVerification={onOpenVerificationPage}

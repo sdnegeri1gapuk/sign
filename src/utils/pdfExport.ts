@@ -53,6 +53,23 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+export function setCachedSignatureDimensions(dataUrl: string, width: number, height: number): void {
+  if (!width || !height) return;
+  signatureDimensionCache.set(dataUrl, { width, height, ratio: width / height });
+}
+
+export async function preloadSignatureDimensions(dataUrl: string): Promise<{ width: number; height: number; ratio: number }> {
+  if (signatureDimensionCache.has(dataUrl)) {
+    return signatureDimensionCache.get(dataUrl)!;
+  }
+  const img = await loadImage(dataUrl);
+  const w = img.naturalWidth || img.width || 140;
+  const h = img.naturalHeight || img.height || 60;
+  const res = { width: w, height: h, ratio: w / h };
+  signatureDimensionCache.set(dataUrl, res);
+  return res;
+}
+
 /**
  * Gets cached natural dimensions of a signature image
  */
@@ -179,67 +196,64 @@ export async function exportOriginalWithSignature(
         imgNaturalH
       );
 
-      // Coordinate transformation based on PDF page rotation
-      let pdfX: number;
-      let pdfY: number;
-      let pdfW: number = fit.width;
-      let pdfH: number = fit.height;
-      let extraRotation = 0;
+      const userRotation = sig.rotation || 0;
+
+      // Center of signature in visual screen coordinates
+      const visualCenterX = fit.x + fit.width / 2;
+      const visualCenterY = fit.y + fit.height / 2;
+
+      let centerPx: number;
+      let centerPy: number;
+      let pdfLibAngle: number;
 
       if (pageRotation === 0) {
-        // Standard unrotated page: Visual (0,0) is TOP-LEFT -> PDF (0,0) is BOTTOM-LEFT
-        pdfX = fit.x;
-        pdfY = visualHeight - (fit.y + fit.height);
+        // Standard unrotated page: visual (0,0) is TOP-LEFT -> PDF (0,0) is BOTTOM-LEFT
+        centerPx = visualCenterX;
+        centerPy = mediaHeight - visualCenterY;
+        pdfLibAngle = -userRotation;
       } else if (pageRotation === 90) {
-        // Page rotated 90° clockwise in PDF viewer
-        pdfX = fit.y;
-        pdfY = fit.x;
-        extraRotation = 90;
+        // Rotated 90° clockwise by viewer:
+        centerPx = mediaWidth - visualCenterY;
+        centerPy = visualCenterX;
+        pdfLibAngle = -(90 + userRotation);
       } else if (pageRotation === 180) {
-        pdfX = visualWidth - (fit.x + fit.width);
-        pdfY = fit.y;
-        extraRotation = 180;
+        // Rotated 180° by viewer:
+        centerPx = mediaWidth - visualCenterX;
+        centerPy = visualCenterY;
+        pdfLibAngle = -(180 + userRotation);
       } else if (pageRotation === 270) {
-        pdfX = visualHeight - (fit.y + fit.height);
-        pdfY = visualWidth - (fit.x + fit.width);
-        extraRotation = 270;
+        // Rotated 270° by viewer:
+        centerPx = visualCenterY;
+        centerPy = mediaHeight - visualCenterX;
+        pdfLibAngle = -(270 + userRotation);
       } else {
-        pdfX = fit.x;
-        pdfY = visualHeight - (fit.y + fit.height);
+        centerPx = visualCenterX;
+        centerPy = mediaHeight - visualCenterY;
+        pdfLibAngle = -userRotation;
       }
 
-      const userRotation = sig.rotation || 0;
-      const netRotation = (userRotation + extraRotation) % 360;
+      const rad = (pdfLibAngle * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
 
-      if (netRotation !== 0) {
-        // When rotated, draw with center rotation
-        // In pdf-lib, counter-clockwise is positive, so clockwise user rotation is negative
-        const pdfLibAngle = -netRotation;
-        const rad = (pdfLibAngle * Math.PI) / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
+      // Position of origin before rotation so that center stays at (centerPx, centerPy)
+      const drawX = centerPx - (fit.width / 2) * cos + (fit.height / 2) * sin;
+      const drawY = centerPy - (fit.width / 2) * sin - (fit.height / 2) * cos;
 
-        // Center point in PDF coordinates
-        const centerX = pdfX + pdfW / 2;
-        const centerY = pdfY + pdfH / 2;
-
-        // Position of origin before rotation so that center stays at (centerX, centerY)
-        const drawX = centerX - (pdfW / 2) * cos + (pdfH / 2) * sin;
-        const drawY = centerY - (pdfW / 2) * sin - (pdfH / 2) * cos;
-
+      if (pdfLibAngle !== 0) {
         page.drawImage(embeddedImage, {
           x: drawX,
           y: drawY,
-          width: pdfW,
-          height: pdfH,
+          width: fit.width,
+          height: fit.height,
           rotate: degrees(pdfLibAngle),
         });
       } else {
         page.drawImage(embeddedImage, {
-          x: pdfX,
-          y: pdfY,
-          width: pdfW,
-          height: pdfH,
+          x: drawX,
+          y: drawY,
+          width: fit.width,
+          height: fit.height,
         });
       }
     }

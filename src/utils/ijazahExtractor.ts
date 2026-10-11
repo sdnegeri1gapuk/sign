@@ -283,8 +283,75 @@ export async function extractIjazahMetadata(
 
     documentType = isTranscript ? 'Transkrip' : 'Ijazah';
 
-    // Tanggal dokumen tetap "14 Juli 2026"
-    documentDate = '14 Juli 2026';
+    // =========================================================================
+    // EKSTRAKSI TANGGAL TANDA TANGAN DOKUMEN:
+    // Sesuai permintaan: ambil dari tanggal tanda tangan di ijazah setelah kata
+    // " Kabupaten Lombok Timur,"
+    // =========================================================================
+    let extractedSigningDate = '';
+
+    // 1. Regex pencarian di teks dokumen setelah kata "Kabupaten Lombok Timur,"
+    const lombokTimurRegex = /(?:Kabupaten\s+Lombok\s+Timur|Kab\.\s*Lombok\s*Timur)\s*,\s*([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/i;
+    const matchLombokTimur = fullDocText.match(lombokTimurRegex);
+    if (matchLombokTimur && matchLombokTimur[1]) {
+      extractedSigningDate = matchLombokTimur[1].trim();
+    }
+
+    // 2. Format numerik/variasi setelah "Kabupaten Lombok Timur," (contoh: 14-07-2026 atau 14/07/2026)
+    if (!extractedSigningDate) {
+      const matchNumeric = fullDocText.match(/(?:Kabupaten\s+Lombok\s+Timur|Kab\.\s*Lombok\s*Timur)\s*[,:]?\s*([0-9]{1,2}[-\/\s]+[A-Za-z0-9]+[-\/\s]+[0-9]{4})/i);
+      if (matchNumeric && matchNumeric[1]) {
+        extractedSigningDate = matchNumeric[1].trim();
+      }
+    }
+
+    // 3. Pencarian visual lines yang memuat "Kabupaten Lombok Timur"
+    if (!extractedSigningDate) {
+      for (const line of visualLines) {
+        if (/Kabupaten\s+Lombok\s+Timur/i.test(line.text)) {
+          const afterLombok = line.text.replace(/^.*?(?:Kabupaten\s+Lombok\s+Timur|Kab\.\s*Lombok\s*Timur)\s*[,:]?\s*/i, '').trim();
+          const dateMatch = afterLombok.match(/([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/i) || afterLombok.match(/([0-9]{1,2}[-\/\s]+[0-9]{1,2}[-\/\s]+[0-9]{4})/);
+          if (dateMatch && dateMatch[1]) {
+            extractedSigningDate = dateMatch[1].trim();
+            break;
+          }
+        }
+      }
+    }
+
+    // 4. Koordinat horizontal rawItems (jika "Kabupaten Lombok Timur," terpisah dari string tanggal)
+    if (!extractedSigningDate) {
+      const lombokItem = rawItems.find((it) => /Lombok\s+Timur/i.test(it.str));
+      if (lombokItem) {
+        const rightItems = rawItems
+          .filter((it) => Math.abs(it.y - lombokItem.y) <= 8 && it.x > lombokItem.x)
+          .sort((a, b) => a.x - b.x);
+        const rightStr = rightItems.map((it) => it.str).join(' ').replace(/^[,:\s]+/, '').trim();
+        const dateMatch = rightStr.match(/([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/i);
+        if (dateMatch && dateMatch[1]) {
+          extractedSigningDate = dateMatch[1].trim();
+        }
+      }
+    }
+
+    // 5. Fallback jika nama kota lain tercantum (misal: "Gapuk, 14 Juli 2026" atau "Selong, ...")
+    if (!extractedSigningDate) {
+      const anyCityMatch = fullDocText.match(/(?:Gapuk|Selong|Mataram|Pancor|Suralaga)\s*,\s*([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/i);
+      if (anyCityMatch && anyCityMatch[1]) {
+        extractedSigningDate = anyCityMatch[1].trim();
+      }
+    }
+
+    // 6. Fallback tanggal format Indonesia standar di bagian bawah dokumen
+    if (!extractedSigningDate) {
+      const anyIndoDate = fullDocText.match(/\b([0-9]{1,2}\s+(?:Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+[0-9]{4})\b/i);
+      if (anyIndoDate && anyIndoDate[1]) {
+        extractedSigningDate = anyIndoDate[1].trim();
+      }
+    }
+
+    // Tanggal final hasil ekstraksi atau default 14 Juli 2026
+    documentDate = extractedSigningDate || '14 Juli 2026';
 
     if (isTranscript) {
       // =======================================================================
@@ -639,6 +706,6 @@ export async function extractIjazahMetadata(
     documentNumber:
       documentNumber ||
       (documentType === 'Transkrip' ? '400.3.11.3/035/SDN1GPK/VI/2026' : '111202663419179'),
-    documentDate: '14 Juli 2026'
+    documentDate: documentDate || '14 Juli 2026'
   };
 }

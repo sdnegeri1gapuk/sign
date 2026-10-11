@@ -50,6 +50,7 @@ import {
   triggerImageDownload
 } from '../../utils/pdfElectronicExport';
 import { getAppSettings } from '../../utils/appSettings';
+import { extractNomorSuratFromPdf } from '../../utils/documentNumberExtractor';
 
 interface ElectronicCreateDocProps {
   onDocumentCreated?: (doc: VerifiedDocument) => void;
@@ -104,15 +105,6 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
     return () => window.removeEventListener('app_settings_changed', onSettingsChange);
   }, []);
 
-  const handleApplySettingsProfile = () => {
-    const settings = getAppSettings();
-    setFormData((prev) => ({
-      ...prev,
-      issuer: settings.issuer,
-      signerName: settings.signerName,
-      signerPosition: settings.signerPosition
-    }));
-  };
   const [googleDriveUrl, setGoogleDriveUrl] = useState<string>('');
 
   // QR Generation state
@@ -276,6 +268,16 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
         signerPosition: settings.signerPosition
       }));
 
+      // Auto-detect letter number (Nomor Surat) from PDF content after "Nomor:"
+      extractNomorSuratFromPdf(bytes).then((detectedNo) => {
+        if (detectedNo) {
+          setFormData((prev) => ({
+            ...prev,
+            documentNumber: detectedNo
+          }));
+        }
+      });
+
       setStep('form_and_editor');
     };
     reader.readAsArrayBuffer(file);
@@ -298,6 +300,17 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
       signerPosition: settings.signerPosition,
       description: 'Dokumen resmi sekolah dengan verifikasi tanda tangan elektronik QR Code.'
     });
+
+    // Auto-detect letter number (Nomor Surat) from sample PDF content
+    extractNomorSuratFromPdf(sample).then((detectedNo) => {
+      if (detectedNo) {
+        setFormData((prev) => ({
+          ...prev,
+          documentNumber: detectedNo
+        }));
+      }
+    });
+
     setStep('form_and_editor');
   };
 
@@ -616,20 +629,9 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
             {/* Left Column: Form Data Dokumen & QR Generation */}
             <div className="lg:col-span-4 space-y-4">
               <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-emerald-400" />
-                    <h4 className="font-bold text-sm text-white">DATA DOKUMEN</h4>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleApplySettingsProfile}
-                    className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold border border-emerald-500/20 transition flex items-center gap-1"
-                    title="Muat ulang nama instansi, penandatangan, dan jabatan dari menu Pengaturan"
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    <span>Muat Profil Pengaturan</span>
-                  </button>
+                <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+                  <FileText className="w-4 h-4 text-emerald-400" />
+                  <h4 className="font-bold text-sm text-white">DATA DOKUMEN</h4>
                 </div>
 
                 <div className="space-y-3 text-xs">
@@ -679,10 +681,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                       />
                     </div>
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-slate-400 font-medium">5. Instansi/Penerbit</label>
-                        <span className="text-[10px] text-emerald-400 font-mono">Pengaturan</span>
-                      </div>
+                      <label className="text-slate-400 block mb-1 font-medium">5. Instansi/Penerbit</label>
                       <input
                         type="text"
                         value={formData.issuer}
@@ -695,10 +694,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-slate-400 font-medium">6. Penandatangan</label>
-                        <span className="text-[10px] text-emerald-400 font-mono">Pengaturan</span>
-                      </div>
+                      <label className="text-slate-400 block mb-1 font-medium">6. Penandatangan</label>
                       <input
                         type="text"
                         value={formData.signerName}
@@ -708,10 +704,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                       />
                     </div>
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-slate-400 font-medium">7. Jabatan Pejabat</label>
-                        <span className="text-[10px] text-emerald-400 font-mono">Pengaturan</span>
-                      </div>
+                      <label className="text-slate-400 block mb-1 font-medium">7. Jabatan Pejabat</label>
                       <input
                         type="text"
                         value={formData.signerPosition}
@@ -720,39 +713,6 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                         className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-white transition font-medium"
                       />
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="text-slate-400 block mb-1 font-medium">8. Keterangan (Opsional)</label>
-                    <textarea
-                      rows={2}
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Keterangan tambahan dokumen resmi..."
-                      className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-white transition resize-none"
-                    />
-                  </div>
-
-                  <div className="p-2.5 rounded-xl bg-indigo-950/30 border border-indigo-800/40 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-indigo-300 font-semibold flex items-center gap-1.5 text-xs">
-                        <LinkIcon className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>9. Link Google Drive Dokumen</span>
-                      </label>
-                      <span className="text-[10px] text-emerald-400 font-medium bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/40">
-                        Bebas / Opsional
-                      </span>
-                    </div>
-                    <input
-                      type="url"
-                      value={googleDriveUrl}
-                      onChange={(e) => setGoogleDriveUrl(e.target.value)}
-                      placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
-                      className="w-full bg-slate-900 border border-indigo-700/60 focus:border-indigo-400 rounded-lg px-2.5 py-1.5 text-white font-mono text-[11px]"
-                    />
-                    <p className="text-[10px] text-slate-400">
-                      ✓ Langsung simpan meski kosong. Link Google Drive bisa ditambahkan belakangan via tombol <strong>Edit</strong> di Dokumen Tersimpan.
-                    </p>
                   </div>
                 </div>
 

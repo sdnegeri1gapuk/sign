@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Download, PenTool, CheckCircle, Cloud } from 'lucide-react';
+import { Download, PenTool, CheckCircle, Cloud, Sparkles } from 'lucide-react';
 import { generateSampleSKPPdf } from '../../utils/samplePdf';
-import { SignatureItem, SignatureTemplate } from '../../types';
+import { SignatureItem, SignatureTemplate, ExportMode } from '../../types';
 import { PdfViewer } from '../PdfViewer';
 import { Sidebar } from '../Sidebar';
 import { ExportModal } from '../ExportModal';
@@ -20,6 +20,7 @@ export const ManualSignApp: React.FC = () => {
   const [fileName, setFileName] = useState<string>('SKP_Saripah_Guru_SD.pdf');
   const [numPages, setNumPages] = useState<number>(2);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [exportModalMode, setExportModalMode] = useState<ExportMode>('original');
 
   // Signatures placed on the document
   const [signatures, setSignatures] = useState<SignatureItem[]>([]);
@@ -224,7 +225,10 @@ export const ManualSignApp: React.FC = () => {
             element.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
         }}
-        onOpenExportModal={() => setIsExportModalOpen(true)}
+        onOpenExportModal={(mode?: ExportMode) => {
+          setExportModalMode(mode || 'original');
+          setIsExportModalOpen(true);
+        }}
         onQuickStampToCurrentPage={handleQuickStampToCurrentPage}
       />
 
@@ -249,7 +253,7 @@ export const ManualSignApp: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={() => setIsSignatureModalOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition"
@@ -258,10 +262,26 @@ export const ManualSignApp: React.FC = () => {
               <span>Kelola TTD Cloud</span>
             </button>
 
+            {/* Quick Flat PDF Export button */}
+            <button
+              onClick={() => {
+                setExportModalMode('flattened');
+                setIsExportModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 text-xs font-semibold shadow-sm transition-all hover:scale-105 active:scale-95"
+              title="Ekspor Flat PDF (Anti-Copy / Gambar Solid 300 DPI)"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Simpan Flat PDF</span>
+            </button>
+
             {/* Primary "Simpan PDF" Trigger Button */}
             <button
-              onClick={() => setIsExportModalOpen(true)}
-              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95"
+              onClick={() => {
+                setExportModalMode('original');
+                setIsExportModalOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all hover:scale-105 active:scale-95"
             >
               <Download className="w-4 h-4" />
               <span>Simpan PDF</span>
@@ -306,6 +326,7 @@ export const ManualSignApp: React.FC = () => {
           originalBytes={originalBytes}
           numPages={numPages}
           signatures={signatures}
+          initialMode={exportModalMode}
         />
       )}
     </div>

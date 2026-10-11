@@ -108,4 +108,4 @@ export interface QrPlacementSettings {
 }
 
 export type MainNavMenu = 'manual' | 'electronic';
-export type ElectronicSubMenu = 'dashboard' | 'create' | 'import_legacy' | 'saved' | 'verify' | 'settings';
+export type ElectronicSubMenu = 'dashboard' | 'create' | 'upload_ijazah' | 'import_legacy' | 'saved' | 'verify' | 'settings';

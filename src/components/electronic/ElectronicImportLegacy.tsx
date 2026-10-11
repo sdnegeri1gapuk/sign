@@ -276,6 +276,9 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     let isMounted = true;
 
     async function renderPage() {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      if (!isMounted || !canvasElement) return;
+
       try {
         if (renderTaskRef.current) {
           try {
@@ -299,12 +302,12 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
 
         // Auto-scale to fit preview container crisply
         const unscaledViewport = page.getViewport({ scale: 1.0 });
-        const targetWidth = 380;
-        const scale = Math.min(1.2, Math.max(0.65, targetWidth / unscaledViewport.width));
+        const targetWidth = 420;
+        const scale = Math.min(1.3, Math.max(0.65, targetWidth / unscaledViewport.width));
         const viewport = page.getViewport({ scale });
 
-        canvasElement.width = viewport.width;
-        canvasElement.height = viewport.height;
+        canvasElement.width = Math.round(viewport.width);
+        canvasElement.height = Math.round(viewport.height);
 
         const ctx = canvasElement.getContext('2d');
         if (!ctx || !isMounted) return;
@@ -737,7 +740,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                     <div className="flex items-center justify-between">
                       <label className="text-slate-300 font-medium flex items-center gap-1.5">
                         <LinkIcon className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>8. Link Google Drive Dokumen Asli (Opsional)</span>
+                        <span>Link Google Drive Dokumen Asli (Opsional)</span>
                       </label>
                       <span className="text-[10px] text-emerald-400 font-mono">Boleh Kosong</span>
                     </div>
@@ -756,7 +759,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                   {/* Description / Student Details */}
                   <div>
                     <label className="text-slate-400 block mb-1 font-medium">
-                      9. Keterangan / Rincian Siswa (Opsional)
+                      Keterangan / Rincian Siswa (Opsional)
                     </label>
                     <textarea
                       rows={2}

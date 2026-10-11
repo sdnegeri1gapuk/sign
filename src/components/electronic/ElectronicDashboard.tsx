@@ -10,7 +10,8 @@ import {
   Clock,
   Layers,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  GraduationCap
 } from 'lucide-react';
 import { VerifiedDocument, ElectronicSubMenu } from '../../types';
 
@@ -58,11 +59,11 @@ export const ElectronicDashboard: React.FC<ElectronicDashboardProps> = ({
             </button>
 
             <button
-              onClick={() => onNavigateSubMenu('verify')}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center gap-2"
+              onClick={() => onNavigateSubMenu('upload_ijazah')}
+              className="px-4 py-2.5 rounded-xl bg-purple-600/30 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 font-semibold text-xs transition flex items-center gap-2"
             >
-              <QrCode className="w-4 h-4 text-emerald-400" />
-              <span>Cek Validitas Dokumen</span>
+              <GraduationCap className="w-4 h-4 text-purple-300" />
+              <span>Upload Ijazah (Baru & Lama)</span>
             </button>
           </div>
         </div>

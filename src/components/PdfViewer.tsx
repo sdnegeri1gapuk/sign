@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { pdfjsLib } from '../utils/pdfWorker';
 import { SignatureItem, SignatureTemplate } from '../types';
-import { loadImage, getCachedSignatureDimensions } from '../utils/pdfExport';
+import { loadImage, getCachedSignatureDimensions, setCachedSignatureDimensions } from '../utils/pdfExport';
 
 interface PdfViewerProps {
   originalBytes: Uint8Array;
@@ -505,6 +505,12 @@ const PdfPageCard: React.FC<{
                 alt={sig.label || 'Tanda Tangan'}
                 className="w-full h-full object-contain pointer-events-none select-none drop-shadow-sm"
                 draggable={false}
+                onLoad={(e) => {
+                  const target = e.currentTarget;
+                  if (target.naturalWidth && target.naturalHeight) {
+                    setCachedSignatureDimensions(sig.dataUrl, target.naturalWidth, target.naturalHeight);
+                  }
+                }}
               />
 
               {/* Floating controls toolbar on selected */}

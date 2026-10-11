@@ -692,7 +692,7 @@ export async function generateSampleIjazahPdf(): Promise<Uint8Array> {
   let sigY = y - 60;
 
   // Tanggal Dokumen di tandatangani
-  page.drawText('Gapuk, 14 Juli 2026', {
+  page.drawText('Kabupaten Lombok Timur, 14 Juli 2026', {
     x: sigX,
     y: sigY,
     size: 9.5,
@@ -924,7 +924,7 @@ export async function generateSampleTranskripPdf(): Promise<Uint8Array> {
 
   // Signature Block Bottom-Right
   const sigX = a4Width - margin - 170;
-  page.drawText('Gapuk, 14 Juli 2026', { x: sigX, y, size: 9, font: fontRegular, color: rgb(0, 0, 0) });
+  page.drawText('Kabupaten Lombok Timur, 14 Juli 2026', { x: sigX, y, size: 9, font: fontRegular, color: rgb(0, 0, 0) });
   y -= 13;
   page.drawText('Kepala Sekolah,', { x: sigX, y, size: 9, font: fontRegular, color: rgb(0, 0, 0) });
   y -= 55;

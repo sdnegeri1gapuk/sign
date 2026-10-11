@@ -30,6 +30,7 @@ interface ExportModalProps {
   originalBytes: Uint8Array;
   numPages: number;
   signatures: SignatureItem[];
+  initialMode?: ExportMode;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -39,10 +40,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   originalBytes,
   numPages,
   signatures,
+  initialMode = 'original',
 }) => {
   // Step 1: 'choose' | Step 2: 'confirm' | Step 3: 'exporting' | Step 4: 'done'
   const [step, setStep] = useState<'choose' | 'confirm' | 'exporting' | 'done'>('choose');
-  const [selectedMode, setSelectedMode] = useState<ExportMode>('original');
+  const [selectedMode, setSelectedMode] = useState<ExportMode>(initialMode);
   const [showComparisonTable, setShowComparisonTable] = useState(false);
 
   // Progress state
@@ -57,14 +59,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setStep('choose');
-      setSelectedMode('original'); // Requirement 19: Default pilihan "PDF Asli + Tanda Tangan"
+      setSelectedMode(initialMode);
       setProgressPercent(0);
       setProgressText('Mempersiapkan PDF...');
       setErrorMsg(null);
       setDownloadedUrl(null);
       setSavedBytes(null);
     }
-  }, [isOpen]);
+  }, [isOpen, initialMode]);
 
   if (!isOpen) return null;
 
@@ -74,7 +76,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       ? `${baseName}_signed.pdf`
       : `${baseName}_flatpdf_signed.pdf`;
 
-  const handleStartExport = async () => {
+  const handleStartExport = async (modeOverride?: ExportMode) => {
+    const effectiveMode = modeOverride || selectedMode;
+    setSelectedMode(effectiveMode);
     setStep('exporting');
     setErrorMsg(null);
     setProgressPercent(5);
@@ -82,9 +86,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
     try {
       let resultBytes: Uint8Array;
-      let finalName = outputFileName;
+      const finalName =
+        effectiveMode === 'original'
+          ? `${baseName}_signed.pdf`
+          : `${baseName}_flatpdf_signed.pdf`;
 
-      if (selectedMode === 'original') {
+      if (effectiveMode === 'original') {
         const res = await exportOriginalWithSignature(
           originalBytes,
           signatures,
@@ -227,6 +234,22 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         <span>Struktur PDF dipertahankan</span>
                       </div>
                     </div>
+
+                    <div className="mt-3.5 pt-2 flex items-center justify-between">
+                      <span className="text-[11px] text-indigo-300 font-medium">Dokumen Vektor Asli (Teks Aktif)</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartExport('original');
+                        }}
+                        className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow transition flex items-center gap-1.5 cursor-pointer"
+                        title="Langsung unduh dokumen format asli dengan tanda tangan"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Simpan Format Asli</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -262,7 +285,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     </div>
 
                     <p className="text-xs text-slate-300 mt-1.5 leading-relaxed font-medium">
-                      Gabungkan seluruh halaman menjadi gambar. Tanda tangan dan isi dokumen menjadi bagian permanen dari gambar.
+                      Gabungkan seluruh halaman menjadi gambar. Tanda tangan dan isi dokumen menjadi bagian permanen dari gambar raster 300 DPI.
                     </p>
 
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1 mt-3 pt-3 border-t border-slate-800/80 text-xs">
@@ -282,6 +305,22 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         <Check className="w-3.5 h-3.5 shrink-0" />
                         <span>Tanpa layer terpisah / aman</span>
                       </div>
+                    </div>
+
+                    <div className="mt-3.5 pt-2 flex items-center justify-between">
+                      <span className="text-[11px] text-amber-300 font-medium">Gambar Solid 300 DPI (Terkunci Anti-Copy)</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStartExport('flattened');
+                        }}
+                        className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                        title="Langsung unduh dokumen format gambar solid anti-copy"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                        <span>Simpan Flat PDF</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -555,7 +594,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={handleStartExport}
+                  onClick={() => handleStartExport()}
                   className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-xs sm:text-sm font-bold shadow-lg transition hover:scale-[1.02] active:scale-[0.98] ${
                     selectedMode === 'original'
                       ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 shadow-indigo-600/30'
@@ -585,7 +624,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleStartExport}
+                onClick={() => handleStartExport()}
                 className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-sm font-bold shadow-lg transition hover:scale-[1.02] ${
                   selectedMode === 'original'
                     ? 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30'

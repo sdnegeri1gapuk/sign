@@ -29,7 +29,7 @@ interface SidebarProps {
   onDeleteSignature: (id: string) => void;
   onDeleteTemplateFromDB: (id: string) => void;
   onJumpToPage: (page: number) => void;
-  onOpenExportModal: () => void;
+  onOpenExportModal: (mode?: 'original' | 'flattened') => void;
   onQuickStampToCurrentPage: (template: SignatureTemplate) => void;
 }
 
@@ -75,14 +75,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Big "Simpan PDF" Main Trigger Button as requested */}
-        <button
-          onClick={onOpenExportModal}
-          className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
-        >
-          <Download className="w-4 h-4" />
-          <span>Simpan PDF</span>
-        </button>
+        {/* Export Buttons: Primary & Direct Flat PDF */}
+        <div className="space-y-2">
+          <button
+            onClick={() => onOpenExportModal('original')}
+            className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-xs shadow-lg shadow-indigo-600/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+            title="Buka dialog simpan PDF"
+          >
+            <Download className="w-4 h-4" />
+            <span>Simpan PDF (Pilih Opsi)</span>
+          </button>
+          <button
+            onClick={() => onOpenExportModal('flattened')}
+            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 font-semibold text-[11px] transition-all hover:scale-[1.01] active:scale-[0.99]"
+            title="Langsung ekspor menjadi Flat PDF (Gambar Solid 300 DPI - Teks tidak dapat dicopy)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>⚡ Simpan Flat PDF (Anti-Copy)</span>
+          </button>
+        </div>
       </div>
 
       {/* Scrollable Settings Content */}
