@@ -81,13 +81,27 @@ interface ElectronicBatchSigningIjazahProps {
   onGoToSavedDocs?: () => void;
   onOpenVerification?: (token: string) => void;
   onSwitchToSingleMode?: () => void;
+  initialFiles?: File[];
+}
+
+export interface BatchUploadProgressInfo {
+  isUploading: boolean;
+  totalFiles: number;
+  currentFileIndex: number;
+  currentFileName: string;
+  totalBytes: number;
+  loadedBytes: number;
+  percent: number;
+  stage: string;
+  isComplete: boolean;
 }
 
 export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazahProps> = ({
   onDocumentImported,
   onGoToSavedDocs,
   onOpenVerification,
-  onSwitchToSingleMode
+  onSwitchToSingleMode,
+  initialFiles
 }) => {
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -97,6 +111,19 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
   const [isGeneratingSamples, setIsGeneratingSamples] = useState<boolean>(false);
   const [isZipping, setIsZipping] = useState<boolean>(false);
+
+  // Upload & Extraction Progress State
+  const [uploadProgress, setUploadProgress] = useState<BatchUploadProgressInfo>({
+    isUploading: false,
+    totalFiles: 0,
+    currentFileIndex: 0,
+    currentFileName: '',
+    totalBytes: 0,
+    loadedBytes: 0,
+    percent: 0,
+    stage: '',
+    isComplete: false
+  });
 
   // Global QR Placement Settings (Default sesuai instruksi: x: 346, y: 622, ukuran: 85, label: OFF)
   const [qrSettings, setQrSettings] = useState<QrPlacementSettings>({
@@ -127,20 +154,51 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Helper to read file bytes with progress tracking
+  const readFileWithProgress = (
+    file: File,
+    onProgress?: (loaded: number, total: number) => void
+  ): Promise<Uint8Array> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(e.loaded, e.total);
+        }
+      };
+      reader.onload = (e) => {
+        resolve(new Uint8Array(e.target?.result as ArrayBuffer));
+      };
+      reader.onerror = (e) => reject(e);
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
   // Process a single file to extract its distinct metadata and generate unique token/QR
-  const processUploadedFile = async (file: File): Promise<BatchItem> => {
-    const bytes = new Uint8Array(await file.arrayBuffer());
+  const processUploadedFile = async (
+    file: File,
+    onStepUpdate?: (subPercent: number, stageName: string) => void
+  ): Promise<BatchItem> => {
+    onStepUpdate?.(15, `Membaca data berkas ${file.name}...`);
+    const bytes = await readFileWithProgress(file, (loaded, total) => {
+      const readRatio = total > 0 ? (loaded / total) * 0.4 : 0.2;
+      onStepUpdate?.(Math.round(readRatio * 100), `Membaca ${(loaded / (1024 * 1024)).toFixed(1)} MB...`);
+    });
+
     const settings = getAppSettings();
 
     // 1. Ekstraksi otomatis metadata unik per dokumen
+    onStepUpdate?.(55, `Mengekstrak data otomatis & nomor ijazah...`);
     const extracted = await extractIjazahMetadata(bytes, file.name);
 
     // 2. Generate token unik & URL verifikasi web baru (Sama persis Buat Dokumen & Ijazah Baru)
+    onStepUpdate?.(75, `Menghasilkan kode verifikasi & QR unik...`);
     const token = generateUniqueToken();
     const url = generateVerificationUrl(token);
     const qrData = await generateQrCodeDataUrl(url);
 
     // Hitung jumlah halaman
+    onStepUpdate?.(90, `Memvalidasi lembar dokumen PDF...`);
     let pageCount = 1;
     try {
       const loadingTask = pdfjsLib.getDocument({
@@ -152,6 +210,8 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
     } catch (e) {
       console.warn('Could not read page count for', file.name, e);
     }
+
+    onStepUpdate?.(100, `Selesai memproses ${file.name}`);
 
     const fileSizeStr = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
 
@@ -178,11 +238,13 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
     };
   };
 
-  // Handle multiple file upload
-  const handleFilesSelected = async (fileList: FileList | null) => {
-    if (!fileList || fileList.length === 0) return;
+  // Handle multiple file upload with real percentage progress
+  const handleFilesSelected = async (fileList: FileList | File[] | null) => {
+    if (!fileList) return;
+    const rawArray = Array.isArray(fileList) ? fileList : Array.from(fileList);
+    if (rawArray.length === 0) return;
 
-    const filesArray = Array.from(fileList).filter(
+    const filesArray = rawArray.filter(
       (f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
     );
 
@@ -191,29 +253,121 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
       return;
     }
 
+    const totalFiles = filesArray.length;
+    const totalBytes = filesArray.reduce((acc, f) => acc + f.size, 0);
+
+    setUploadProgress({
+      isUploading: true,
+      totalFiles,
+      currentFileIndex: 1,
+      currentFileName: filesArray[0].name,
+      totalBytes,
+      loadedBytes: 0,
+      percent: 2,
+      stage: `Menyiapkan ${totalFiles} berkas ijazah untuk diunggah...`,
+      isComplete: false
+    });
+
     const newItems: BatchItem[] = [];
-    for (const file of filesArray) {
+    let completedBytes = 0;
+
+    for (let i = 0; i < totalFiles; i++) {
+      const file = filesArray[i];
+      const prevFileBytes = completedBytes;
+
+      setUploadProgress((prev) => ({
+        ...prev,
+        currentFileIndex: i + 1,
+        currentFileName: file.name,
+        stage: `Membaca & memproses berkas ${i + 1} dari ${totalFiles}: ${file.name}`
+      }));
+
       try {
-        const item = await processUploadedFile(file);
+        const item = await processUploadedFile(file, (subPercent, subStage) => {
+          const fileContribution = (subPercent / 100) * file.size;
+          const currentTotalLoaded = Math.min(totalBytes, prevFileBytes + fileContribution);
+          const overallPercent = Math.min(98, Math.round((currentTotalLoaded / (totalBytes || 1)) * 100));
+
+          setUploadProgress((prev) => ({
+            ...prev,
+            loadedBytes: currentTotalLoaded,
+            percent: Math.max(prev.percent, overallPercent),
+            stage: subStage
+          }));
+        });
+
         newItems.push(item);
+        completedBytes += file.size;
+        const currentFileDonePercent = Math.min(99, Math.round(((i + 1) / totalFiles) * 100));
+
+        setUploadProgress((prev) => ({
+          ...prev,
+          loadedBytes: completedBytes,
+          percent: Math.max(prev.percent, currentFileDonePercent),
+          stage: `Selesai ${i + 1}/${totalFiles} (${file.name})`
+        }));
       } catch (err) {
         console.error('Error processing batch item', file.name, err);
+        completedBytes += file.size;
       }
     }
 
+    // 100% Completion state
+    setUploadProgress((prev) => ({
+      ...prev,
+      loadedBytes: totalBytes,
+      percent: 100,
+      stage: `Selesai! Berhasil mengunggah ${newItems.length} berkas ijazah.`,
+      isComplete: true
+    }));
+
+    // Pause briefly so user clearly sees the 100% completion badge
+    await new Promise((res) => setTimeout(res, 650));
+
     setBatchItems((prev) => [...prev, ...newItems]);
     setIsCompleted(false);
+    setUploadProgress((prev) => ({ ...prev, isUploading: false }));
   };
 
-  // Load sample batch (3 distinct authentic Indonesian diploma PDFs)
+  // Handle initial files passed from single mode redirect
+  const initialFilesProcessed = useRef<boolean>(false);
+  useEffect(() => {
+    if (initialFiles && initialFiles.length > 0 && !initialFilesProcessed.current) {
+      initialFilesProcessed.current = true;
+      handleFilesSelected(initialFiles);
+    }
+  }, [initialFiles]);
+
+  // Load sample batch (3 distinct authentic Indonesian diploma PDFs) with percentage progress
   const handleLoadSampleBatch = async () => {
     try {
       setIsGeneratingSamples(true);
+      setUploadProgress({
+        isUploading: true,
+        totalFiles: 3,
+        currentFileIndex: 1,
+        currentFileName: 'IJZ-111202663419179_sign.pdf (Ahmad Fauzi)',
+        totalBytes: 220 * 1024,
+        loadedBytes: 0,
+        percent: 15,
+        stage: 'Membuat berkas contoh ijazah 1/3 (Ahmad Fauzi)...',
+        isComplete: false
+      });
+
       const samples = await generateSampleBatchIjazahPdfs();
       const settings = getAppSettings();
 
       const items: BatchItem[] = [];
-      for (const s of samples) {
+      for (let i = 0; i < samples.length; i++) {
+        const s = samples[i];
+        setUploadProgress((prev) => ({
+          ...prev,
+          currentFileIndex: i + 1,
+          currentFileName: s.fileName,
+          percent: Math.round(((i + 0.4) / samples.length) * 100),
+          stage: `Mengekstrak data ijazah contoh ${i + 1}/${samples.length} (${s.studentName})...`
+        }));
+
         const extracted = await extractIjazahMetadata(s.bytes, s.fileName);
         const token = generateUniqueToken();
         const url = generateVerificationUrl(token);
@@ -239,7 +393,22 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
           verificationUrl: url,
           qrDataUrl: qrData
         });
+
+        setUploadProgress((prev) => ({
+          ...prev,
+          percent: Math.round(((i + 1) / samples.length) * 100),
+          stage: `Selesai contoh ${i + 1}/${samples.length} (${s.studentName})`
+        }));
       }
+
+      setUploadProgress((prev) => ({
+        ...prev,
+        percent: 100,
+        stage: 'Contoh batch 3 ijazah berhasil dimuat 100%!',
+        isComplete: true
+      }));
+
+      await new Promise((res) => setTimeout(res, 600));
 
       setBatchItems((prev) => [...prev, ...items]);
       setIsCompleted(false);
@@ -521,7 +690,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                 className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition flex items-center gap-2"
               >
                 <FileText className="w-4 h-4 text-emerald-400" />
-                <span>Mode Dokumen Satuan</span>
+                <span>Dokumen Tunggal</span>
               </button>
             )}
 
@@ -535,7 +704,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
               }`}
             >
               <Settings2 className="w-4 h-4" />
-              <span>Pengaturan Barcode Massal</span>
+              <span>Pengaturan Barcode</span>
             </button>
           </div>
         </div>
@@ -640,7 +809,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                       : 'bg-slate-900 text-slate-400 hover:text-white'
                   }`}
                 >
-                  Mode 1: Asli + Barcode
+                  Asli
                 </button>
                 <button
                   type="button"
@@ -651,11 +820,11 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                       : 'bg-slate-900 text-slate-400 hover:text-white'
                   }`}
                 >
-                  Mode 2: Flat 300 DPI
+                  Flat
                 </button>
               </div>
               <p className="text-[10px] text-slate-500">
-                {exportMode === 'original' ? 'Teks vektor tajam & ringan' : 'Raster 300 DPI anti-manipulasi'}
+                {exportMode === 'original' ? 'Teks vektor tajam & ringan' : 'Raster 300 DPI solid'}
               </p>
             </div>
           </div>
@@ -675,11 +844,17 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
             setIsDragOver(false);
             handleFilesSelected(e.dataTransfer.files);
           }}
-          onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition ${
-            isDragOver
-              ? 'border-emerald-400 bg-emerald-950/30'
-              : 'border-slate-700 hover:border-emerald-500 bg-slate-950/40 hover:bg-slate-950/70'
+          onClick={() => {
+            if (!uploadProgress.isUploading) {
+              fileInputRef.current?.click();
+            }
+          }}
+          className={`border-2 border-dashed rounded-2xl p-7 text-center transition ${
+            uploadProgress.isUploading
+              ? 'border-emerald-500 bg-emerald-950/20 cursor-wait'
+              : isDragOver
+              ? 'border-emerald-400 bg-emerald-950/30 cursor-pointer'
+              : 'border-slate-700 hover:border-emerald-500 bg-slate-950/40 hover:bg-slate-950/70 cursor-pointer'
           }`}
         >
           <input
@@ -687,31 +862,65 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
             ref={fileInputRef}
             multiple
             accept=".pdf,application/pdf"
+            disabled={uploadProgress.isUploading}
             onChange={(e) => handleFilesSelected(e.target.files)}
             className="hidden"
           />
 
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shadow-inner">
-              <Upload className="w-6 h-6" />
+          {uploadProgress.isUploading ? (
+            <div className="flex flex-col items-center gap-3 py-2 max-w-md mx-auto">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner animate-pulse">
+                <Upload className="w-6 h-6 animate-bounce" />
+              </div>
+              <div className="w-full space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="text-white flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                    Sedang Mengunggah Dokumen...
+                  </span>
+                  <span className="font-mono text-emerald-400 font-bold text-sm">
+                    {uploadProgress.percent}%
+                  </span>
+                </div>
+                <div className="w-full bg-slate-950 rounded-full h-3 p-0.5 border border-slate-800 overflow-hidden shadow-inner">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.max(5, uploadProgress.percent)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span className="truncate max-w-[240px]">
+                    {uploadProgress.currentFileName || uploadProgress.stage}
+                  </span>
+                  <span className="shrink-0 font-mono text-slate-300">
+                    Berkas {uploadProgress.currentFileIndex}/{uploadProgress.totalFiles}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-bold text-white">
-                Pilih atau Tarik Beberapa Berkas PDF Ijazah Sekaligus
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                Anda dapat memilih 2, 5, 10, atau lebih berkas PDF ijazah secara bersamaan.
-              </p>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shadow-inner">
+                <Upload className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">
+                  Pilih atau Tarik Beberapa Berkas PDF Ijazah Sekaligus
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Anda dapat memilih 2, 5, 10, atau lebih berkas PDF ijazah secara bersamaan.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="px-3 py-1 rounded-full bg-slate-800 text-emerald-300 text-[11px] font-semibold border border-slate-700">
+                  Format: .PDF
+                </span>
+                <span className="px-3 py-1 rounded-full bg-slate-800 text-teal-300 text-[11px] font-semibold border border-slate-700">
+                  Mendukung Multi-Seleksi
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="px-3 py-1 rounded-full bg-slate-800 text-emerald-300 text-[11px] font-semibold border border-slate-700">
-                Format: .PDF
-              </span>
-              <span className="px-3 py-1 rounded-full bg-slate-800 text-teal-300 text-[11px] font-semibold border border-slate-700">
-                Mendukung Multi-Seleksi
-              </span>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Action Toolbar: Sample generator & Quick actions */}
@@ -726,12 +935,12 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
               {isGeneratingSamples ? (
                 <>
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Membuat Berkas Contoh...</span>
+                  <span>Membuat Contoh...</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 text-emerald-400" />
-                  <span>Muat Contoh Batch (3 Ijazah Siswa Berbeda)</span>
+                  <span>Contoh Batch</span>
                 </>
               )}
             </button>
@@ -743,7 +952,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                 className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800 text-xs font-medium transition flex items-center gap-1.5"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Kosongkan Antrian</span>
+                <span>Kosongkan</span>
               </button>
             )}
           </div>
@@ -812,7 +1021,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                   ) : (
                     <>
                       <Archive className="w-4 h-4" />
-                      <span>Unduh Semua Sekaligus (.ZIP)</span>
+                      <span>Unduh ZIP</span>
                     </>
                   )}
                 </button>
@@ -823,7 +1032,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                     onClick={onGoToSavedDocs}
                     className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition"
                   >
-                    Buka Dokumen Tersimpan
+                    Dokumen Tersimpan
                   </button>
                 )}
               </div>
@@ -839,7 +1048,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
             <div>
               <h3 className="font-bold text-white text-base flex items-center gap-2">
                 <FileCheck className="w-5 h-5 text-emerald-400" />
-                <span>Daftar Dokumen & Metadata Masing-Masing</span>
+                <span>Daftar Dokumen</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
                 Setiap dokumen memiliki nama siswa, nomor ijazah, dan token verifikasi uniknya sendiri.
@@ -862,7 +1071,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Tanda Tangani Semua Dokumen ({batchItems.length} Berkas)</span>
+                    <span>Tanda Tangani Semua</span>
                   </>
                 )}
               </button>
@@ -1060,7 +1269,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                   className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition flex items-center gap-2"
                 >
                   <Archive className="w-4 h-4" />
-                  <span>Unduh Semua Dokumen (.ZIP)</span>
+                  <span>Unduh ZIP</span>
                 </button>
               )}
 
@@ -1072,7 +1281,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                   className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition flex items-center gap-2"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Tanda Tangani Semua ({batchItems.length})</span>
+                  <span>Tanda Tangani Semua</span>
                 </button>
               )}
             </div>
@@ -1164,7 +1373,7 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                 onClick={() => handleSaveEditedItem(editingItem)}
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition"
               >
-                Simpan Perubahan
+                Simpan
               </button>
             </div>
           </div>
@@ -1237,6 +1446,97 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                 >
                   Tutup
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL OVERLAY: INDIKATOR PROGRES UPLOAD & EKSTRAKSI DOKUMEN BATCH */}
+      {uploadProgress.isUploading && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl shadow-emerald-950/50 space-y-5 text-center relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Top glowing bar */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
+
+            {/* Icon */}
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-emerald-500/20 animate-ping opacity-30" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                {uploadProgress.isComplete ? (
+                  <CheckCircle2 className="w-8 h-8 text-white animate-bounce" />
+                ) : (
+                  <Upload className="w-8 h-8 text-white animate-pulse" />
+                )}
+              </div>
+            </div>
+
+            {/* Title & Info */}
+            <div className="space-y-1">
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                {uploadProgress.isComplete
+                  ? 'Upload Selesai!'
+                  : 'Sedang Mengunggah & Memproses Dokumen'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {uploadProgress.isComplete
+                  ? 'Semua berkas ijazah telah siap di dalam daftar.'
+                  : `Memproses berkas ${uploadProgress.currentFileIndex} dari total ${uploadProgress.totalFiles} berkas`}
+              </p>
+            </div>
+
+            {/* Big Percent Badge */}
+            <div className="py-1">
+              <div className="inline-flex items-baseline gap-1.5 px-5 py-2 rounded-2xl bg-emerald-950/70 border border-emerald-500/30 shadow-inner">
+                <span className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300 font-mono tracking-tight">
+                  {uploadProgress.percent}%
+                </span>
+                <span className="text-xs text-emerald-400 font-bold uppercase tracking-wider">
+                  {uploadProgress.isComplete ? 'Selesai' : 'Terunggah'}
+                </span>
+              </div>
+            </div>
+
+            {/* Glowing Animated Progress Bar */}
+            <div className="space-y-2">
+              <div className="w-full bg-slate-950 rounded-full h-3.5 p-0.5 border border-slate-800 shadow-inner overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 rounded-full transition-all duration-300 relative shadow-md shadow-emerald-500/50"
+                  style={{ width: `${Math.max(4, uploadProgress.percent)}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono px-1">
+                <span>
+                  {uploadProgress.totalBytes > 0
+                    ? `${(uploadProgress.loadedBytes / (1024 * 1024)).toFixed(1)} MB / ${(uploadProgress.totalBytes / (1024 * 1024)).toFixed(1)} MB`
+                    : `${uploadProgress.currentFileIndex}/${uploadProgress.totalFiles} berkas`}
+                </span>
+                <span className="text-emerald-400 font-bold">
+                  {uploadProgress.percent}%
+                </span>
+              </div>
+            </div>
+
+            {/* Current File and Action Box */}
+            <div className="bg-slate-950/80 rounded-2xl p-3.5 border border-slate-800/80 text-left space-y-1.5">
+              <div className="flex items-center gap-2 overflow-hidden text-xs text-slate-300">
+                <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate font-mono font-medium" title={uploadProgress.currentFileName}>
+                  {uploadProgress.currentFileName || 'Menyiapkan berkas...'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                <RefreshCw
+                  className={`w-3 h-3 text-teal-400 shrink-0 ${
+                    uploadProgress.isComplete ? '' : 'animate-spin'
+                  }`}
+                />
+                <span className="truncate text-slate-300">
+                  {uploadProgress.stage}
+                </span>
               </div>
             </div>
           </div>

@@ -480,7 +480,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                 className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-purple-300 border border-purple-800/40 transition flex items-center gap-1.5 shadow-sm"
               >
                 <FileText className="w-4 h-4 text-purple-400" />
-                <span>Contoh Ijazah (IJZ-)</span>
+                <span>Contoh Ijazah</span>
               </button>
 
               <button
@@ -489,7 +489,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                 className="px-3.5 py-2 rounded-xl bg-indigo-950/70 hover:bg-indigo-900/80 text-xs font-semibold text-indigo-300 border border-indigo-700/50 transition flex items-center gap-1.5 shadow-sm"
               >
                 <FileText className="w-4 h-4 text-indigo-400" />
-                <span>Contoh Transkrip (TRN-)</span>
+                <span>Contoh Transkrip</span>
               </button>
             </div>
           </div>
@@ -533,12 +533,12 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                 {isSaving ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Menyimpan Ijazah...</span>
+                    <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    <span>Daftarkan Ijazah Ini</span>
+                    <span>Daftarkan</span>
                   </>
                 )}
               </button>
@@ -562,7 +562,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                     title="Muat nama instansi dan penandatangan dari menu Pengaturan"
                   >
                     <RefreshCw className="w-3 h-3" />
-                    <span>Muat Profil Pengaturan</span>
+                    <span>Muat Profil</span>
                   </button>
                 </div>
 
@@ -780,12 +780,12 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                     {isSaving ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Mendaftarkan Ijazah ke Database...</span>
+                        <span>Menyimpan...</span>
                       </>
                     ) : (
                       <>
                         <Check className="w-4 h-4" />
-                        <span>SIMPAN & DAFTARKAN IJAZAH KE SISTEM VERIFIKASI</span>
+                        <span>Simpan Ijazah</span>
                       </>
                     )}
                   </button>
@@ -968,7 +968,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                 className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center justify-center gap-2"
               >
                 {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedLink ? 'Tautan Disalin!' : 'Salin Link Verifikasi Baru'}</span>
+                <span>{copiedLink ? 'Tersalin' : 'Salin Link'}</span>
               </button>
 
               <button
@@ -982,7 +982,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                 className="py-3 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/20 transition flex items-center justify-center gap-2"
               >
                 <ExternalLink className="w-4 h-4" />
-                <span>Buka Halaman Verifikasi</span>
+                <span>Verifikasi</span>
               </button>
             </div>
 
@@ -997,14 +997,14 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                 }}
                 className="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5"
               >
-                <span>Upload Ijazah Lainnya</span>
+                <span>Upload Lagi</span>
               </button>
               {onGoToSavedDocs && (
                 <button
                   onClick={onGoToSavedDocs}
                   className="text-xs text-purple-400 hover:text-purple-300 transition flex items-center gap-1.5"
                 >
-                  <span>Lihat Dokumen Tersimpan</span>
+                  <span>Dokumen Tersimpan</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}

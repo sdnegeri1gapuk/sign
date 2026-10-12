@@ -392,7 +392,7 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
           title="Login Pengelola / Administrator"
         >
           <Lock className="w-3 h-3" />
-          <span>Kelola Aplikasi (Admin)</span>
+          <span>Admin</span>
         </button>
       </footer>
 
@@ -447,7 +447,7 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
                   type="submit"
                   className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition"
                 >
-                  Buka Aplikasi
+                  Masuk
                 </button>
               </div>
             </form>

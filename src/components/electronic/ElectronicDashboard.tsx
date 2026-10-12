@@ -55,7 +55,7 @@ export const ElectronicDashboard: React.FC<ElectronicDashboardProps> = ({
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition flex items-center gap-2"
             >
               <FileText className="w-4 h-4" />
-              <span>Buat Dokumen Sekarang</span>
+              <span>Buat Dokumen</span>
             </button>
 
             <button
@@ -63,7 +63,7 @@ export const ElectronicDashboard: React.FC<ElectronicDashboardProps> = ({
               className="px-4 py-2.5 rounded-xl bg-purple-600/30 hover:bg-purple-600/40 text-purple-200 border border-purple-500/40 font-semibold text-xs transition flex items-center gap-2"
             >
               <GraduationCap className="w-4 h-4 text-purple-300" />
-              <span>Upload Ijazah (Baru & Lama)</span>
+              <span>Upload Ijazah</span>
             </button>
           </div>
         </div>
@@ -135,7 +135,7 @@ export const ElectronicDashboard: React.FC<ElectronicDashboardProps> = ({
                 onClick={() => onNavigateSubMenu('create')}
                 className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
               >
-                Buat Dokumen Pertama
+                Buat Dokumen
               </button>
             </div>
           ) : (

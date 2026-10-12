@@ -228,7 +228,7 @@ export const ElectronicSettings: React.FC = () => {
               className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition flex items-center gap-2"
             >
               {saved ? <Check className="w-4 h-4 text-white" /> : <Save className="w-4 h-4" />}
-              <span>{saved ? 'Pengaturan Disimpan!' : 'Simpan Pengaturan'}</span>
+              <span>{saved ? 'Tersimpan' : 'Simpan'}</span>
             </button>
           </div>
         </form>

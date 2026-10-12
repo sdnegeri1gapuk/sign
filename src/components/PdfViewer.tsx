@@ -829,7 +829,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             onClick={onOpenSignatureModal}
             className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-lg border border-slate-700 transition"
           >
-            Pilih / Upload TTD Lain
+            Pilih TTD
           </button>
         </div>
       </div>

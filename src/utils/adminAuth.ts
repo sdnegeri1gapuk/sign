@@ -217,9 +217,13 @@ export function isCredentialsCloudSynced(): boolean {
  */
 export function isUserLoggedIn(): boolean {
   try {
-    return localStorage.getItem(ADMIN_AUTH_KEY) === 'true';
+    const session = localStorage.getItem(ADMIN_AUTH_KEY);
+    // Jika pengguna secara eksplisit menekan tombol keluar
+    if (session === 'false') return false;
+    // Default aktif agar saat pertama kali membuka aplikasi langsung masuk ke dashboard
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -317,7 +321,7 @@ export function verifyAndLogin(userOrPin: string, pass?: string): boolean {
  */
 export function logoutUser(): void {
   try {
-    localStorage.removeItem(ADMIN_AUTH_KEY);
+    localStorage.setItem(ADMIN_AUTH_KEY, 'false');
     localStorage.removeItem(ADMIN_USER_DISPLAY_KEY);
   } catch {
     //

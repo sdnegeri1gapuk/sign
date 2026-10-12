@@ -247,7 +247,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         title="Langsung unduh dokumen format asli dengan tanda tangan"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        <span>Simpan Format Asli</span>
+                        <span>Simpan Asli</span>
                       </button>
                     </div>
                   </div>
@@ -319,7 +319,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         title="Langsung unduh dokumen format gambar solid anti-copy"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                        <span>Simpan Flat PDF</span>
+                        <span>Simpan Flat</span>
                       </button>
                     </div>
                   </div>
@@ -334,7 +334,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               >
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-indigo-400" />
-                  <span>Lihat Tabel Perbandingan Mode Export Lengkap</span>
+                  <span>Perbandingan Mode</span>
                 </div>
                 {showComparisonTable ? (
                   <ChevronUp className="w-4 h-4 text-slate-400" />
@@ -603,9 +603,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 >
                   <Download className="w-4 h-4" />
                   <span>
-                    {selectedMode === 'original'
-                      ? 'Simpan PDF Asli (Teks Aktif)'
-                      : 'Simpan Flat PDF (Gambar Solid - Anti Copy)'}
+                    {selectedMode === 'original' ? 'Simpan PDF' : 'Simpan Flat PDF'}
                   </span>
                 </button>
               </div>

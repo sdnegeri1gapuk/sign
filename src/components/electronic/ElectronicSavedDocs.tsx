@@ -202,7 +202,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
               className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5 shadow"
             >
               <FileText className="w-4 h-4" />
-              <span>Buat Dokumen Baru</span>
+              <span>Buat Dokumen</span>
             </button>
           )}
         </div>
@@ -532,7 +532,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                   className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition flex items-center justify-center gap-1.5 shadow"
                 >
                   <Save className="w-4 h-4" />
-                  <span>{isUpdating ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+                  <span>{isUpdating ? 'Menyimpan...' : 'Simpan'}</span>
                 </button>
               </div>
             </form>
@@ -571,7 +571,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                 onClick={handleConfirmDelete}
                 className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
               >
-                {isDeleting ? 'Menghapus...' : 'Ya, Hapus Dokumen'}
+                {isDeleting ? 'Menghapus...' : 'Hapus'}
               </button>
             </div>
           </div>
@@ -673,7 +673,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                 className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-1.5"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>Buka Verifikasi Publik</span>
+                <span>Verifikasi</span>
               </button>
               <button
                 onClick={() => setSelectedDoc(null)}
@@ -728,7 +728,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                 onClick={handleConfirmRevoke}
                 className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5"
               >
-                {isRevoking ? 'Memproses...' : 'Ya, Cabut Dokumen'}
+                {isRevoking ? 'Memproses...' : 'Cabut Dokumen'}
               </button>
             </div>
           </div>

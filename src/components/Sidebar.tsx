@@ -83,15 +83,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="Buka dialog simpan PDF"
           >
             <Download className="w-4 h-4" />
-            <span>Simpan PDF (Pilih Opsi)</span>
+            <span>Simpan PDF</span>
           </button>
           <button
             onClick={() => onOpenExportModal('flattened')}
             className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 font-semibold text-[11px] transition-all hover:scale-[1.01] active:scale-[0.99]"
-            title="Langsung ekspor menjadi Flat PDF (Gambar Solid 300 DPI - Teks tidak dapat dicopy)"
+            title="Langsung ekspor menjadi Flat PDF"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>⚡ Simpan Flat PDF (Anti-Copy)</span>
+            <span>Simpan Flat PDF</span>
           </button>
         </div>
       </div>
@@ -110,7 +110,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title="Kembali ke Dokumen SKP Contoh"
             >
               <RefreshCw className="w-3 h-3" />
-              <span>Reset Contoh SKP</span>
+              <span>Reset Contoh</span>
             </button>
           </div>
 
@@ -132,7 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="flex-1 py-1.5 px-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-center transition flex items-center justify-center gap-1.5 shadow"
             >
               <Upload className="w-3.5 h-3.5" />
-              <span>Upload File PDF Baru</span>
+              <span>Upload PDF</span>
             </button>
             <input
               ref={fileInputRef}
@@ -149,14 +149,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Cloud className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="font-bold text-slate-200">Pilihan TTD Cloud (Online)</span>
+              <span className="font-bold text-slate-200">Pilihan TTD Cloud</span>
             </div>
             <button
               onClick={onOpenSignatureModal}
               className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 font-bold text-[11px]"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Upload TTD</span>
+              <span>Upload TTD</span>
             </button>
           </div>
 
@@ -167,7 +167,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={onOpenSignatureModal}
                 className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg text-xs"
               >
-                Upload Tanda Tangan
+                Upload TTD
               </button>
             </div>
           ) : (

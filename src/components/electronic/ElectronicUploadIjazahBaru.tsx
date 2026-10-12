@@ -63,6 +63,24 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
 }) => {
   // Workflow Mode: 'single' (Dokumen Satuan) | 'batch' (Batch Signing / Massal)
   const [mode, setMode] = useState<'single' | 'batch'>('single');
+  const [batchInitialFiles, setBatchInitialFiles] = useState<File[]>([]);
+
+  // Single file upload progress state with percentage
+  const [singleUploadProgress, setSingleUploadProgress] = useState<{
+    isUploading: boolean;
+    percent: number;
+    stage: string;
+    fileName: string;
+    fileSizeStr: string;
+    isComplete: boolean;
+  }>({
+    isUploading: false,
+    percent: 0,
+    stage: '',
+    fileName: '',
+    fileSizeStr: '',
+    isComplete: false
+  });
 
   // Workflow Step for single mode: 'upload' | 'editor' | 'success'
   const [step, setStep] = useState<'upload' | 'editor' | 'success'>('upload');
@@ -226,13 +244,14 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
     }
   };
 
-  // Handle PDF file upload with full automatic Ijazah field extraction
+  // Handle PDF file upload with full automatic Ijazah field extraction and percentage progress
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    // Jika pengguna memilih banyak berkas sekaligus, otomatis alihkan ke Batch Signing
+    // Jika pengguna memilih banyak berkas sekaligus, otomatis alihkan ke Batch Signing dan kirim berkasnya
     if (files.length > 1) {
+      setBatchInitialFiles(Array.from(files));
       setMode('batch');
       return;
     }
@@ -243,11 +262,38 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
       return;
     }
 
+    const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+    setSingleUploadProgress({
+      isUploading: true,
+      percent: 5,
+      stage: `Membaca berkas PDF (${sizeStr})...`,
+      fileName: file.name,
+      fileSizeStr: sizeStr,
+      isComplete: false
+    });
+
     const reader = new FileReader();
+    reader.onprogress = (ev) => {
+      if (ev.lengthComputable && ev.total > 0) {
+        const readPercent = Math.min(45, Math.round((ev.loaded / ev.total) * 45));
+        setSingleUploadProgress((prev) => ({
+          ...prev,
+          percent: Math.max(prev.percent, readPercent),
+          stage: `Mengunggah berkas (${((ev.loaded / (1024 * 1024))).toFixed(1)} MB)...`
+        }));
+      }
+    };
+
     reader.onload = async (ev) => {
       const bytes = new Uint8Array(ev.target?.result as ArrayBuffer);
       setFileName(file.name);
-      setFileSizeStr((file.size / (1024 * 1024)).toFixed(2) + ' MB');
+      setFileSizeStr(sizeStr);
+
+      setSingleUploadProgress((prev) => ({
+        ...prev,
+        percent: 50,
+        stage: 'Mengekstrak data ijazah, nomor & nama siswa...'
+      }));
 
       const settings = getAppSettings();
 
@@ -269,6 +315,12 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
         signerName: settings.signerName,
         signerPosition: settings.signerPosition,
         description: `${extracted.documentType} resmi kelulusan siswa an. ${extracted.studentName} dengan penempelan barcode verifikasi.`
+      }));
+
+      setSingleUploadProgress((prev) => ({
+        ...prev,
+        percent: 75,
+        stage: `Menghasilkan kode verifikasi & QR untuk ${extracted.studentName || 'siswa'}...`
       }));
 
       // Mekanisme penandatanganan sama persis seperti menu Buat Dokumen:
@@ -293,6 +345,12 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
         labelText: 'Scan Verifikasi Ijazah'
       });
 
+      setSingleUploadProgress((prev) => ({
+        ...prev,
+        percent: 90,
+        stage: 'Memvalidasi lembar dokumen PDF...'
+      }));
+
       // Pre-calculate page dimensions & page count
       try {
         const loadingTask = pdfjsLib.getDocument({
@@ -312,10 +370,26 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
         console.error('Failed to inspect PDF pages', err);
       }
 
+      setSingleUploadProgress((prev) => ({
+        ...prev,
+        percent: 100,
+        stage: 'Selesai! Berkas siap ditandatangani.',
+        isComplete: true
+      }));
+
+      await new Promise((res) => setTimeout(res, 500));
+
       setPdfBytes(bytes);
       setCurrentPage(1);
       setStep('editor');
+      setSingleUploadProgress((prev) => ({ ...prev, isUploading: false }));
     };
+
+    reader.onerror = () => {
+      alert('Gagal membaca berkas PDF');
+      setSingleUploadProgress((prev) => ({ ...prev, isUploading: false }));
+    };
+
     reader.readAsArrayBuffer(file);
   };
 
@@ -694,40 +768,27 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
           <button
             type="button"
             onClick={() => setMode('single')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2.5 ${
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
               mode === 'single'
                 ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 ring-1 ring-emerald-400/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <FileText className="w-4 h-4 text-emerald-300" />
-            <div className="text-left">
-              <span className="block font-bold">Dokumen Tunggal</span>
-              <span className="block text-[10px] text-emerald-200/80 font-normal">
-                Editor Visual & Geser Barcode
-              </span>
-            </div>
+            <span>Dokumen Tunggal</span>
           </button>
 
           <button
             type="button"
             onClick={() => setMode('batch')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2.5 ${
+            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
               mode === 'batch'
                 ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 ring-1 ring-emerald-400/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Layers className="w-4 h-4 text-teal-300" />
-            <div className="text-left">
-              <span className="block font-bold">Batch Signing (Tanda Tangan Massal)</span>
-              <span className="block text-[10px] text-teal-200/80 font-normal">
-                Banyak Berkas Sekaligus • Metadata Masing-Masing Siswa
-              </span>
-            </div>
-            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-200 text-[9px] font-bold uppercase tracking-wider">
-              Massal
-            </span>
+            <span>Batch Signing</span>
           </button>
         </div>
 
@@ -747,6 +808,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
           onGoToSavedDocs={onGoToSavedDocs}
           onOpenVerification={onOpenVerification}
           onSwitchToSingleMode={() => setMode('single')}
+          initialFiles={batchInitialFiles}
         />
       ) : (
         <>
@@ -773,7 +835,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                   onClick={() => setMode('batch')}
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition shrink-0 flex items-center gap-1.5"
                 >
-                  <span>Buka Batch Signing</span>
+                  <span>Batch Signing</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -785,7 +847,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
 
                 <div className="space-y-2">
                   <h3 className="text-xl font-bold text-white tracking-wide">
-                    Upload & Tempel Barcode Ijazah Baru
+                    Upload Ijazah Baru
                   </h3>
                   <p className="text-sm text-slate-400 max-w-lg mx-auto">
                     Unggah berkas PDF Ijazah untuk diekstrak otomatis datanya (Nomor, Tanggal Tanda Tangan, Nama Siswa), dibuatkan Barcode Verifikasi resmi, dan ditempelkan langsung pada posisi lembar ijazah.
@@ -793,27 +855,77 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                 </div>
 
                 {/* Drag & Drop File Zone */}
-                <label className="border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-2xl p-8 block cursor-pointer transition bg-slate-950/40 hover:bg-slate-950/70 group">
+                <label
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      const pseudoEvent = {
+                        target: { files: e.dataTransfer.files }
+                      } as unknown as React.ChangeEvent<HTMLInputElement>;
+                      handleFileUpload(pseudoEvent);
+                    }
+                  }}
+                  className={`border-2 border-dashed rounded-2xl p-8 block transition ${
+                    singleUploadProgress.isUploading
+                      ? 'border-emerald-500 bg-emerald-950/20 cursor-wait'
+                      : 'border-slate-700 hover:border-emerald-500 cursor-pointer bg-slate-950/40 hover:bg-slate-950/70 group'
+                  }`}
+                >
                   <input
                     type="file"
                     multiple
                     accept=".pdf,application/pdf"
+                    disabled={singleUploadProgress.isUploading}
                     onChange={handleFileUpload}
                     className="hidden"
                   />
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition">
-                      <Upload className="w-6 h-6" />
+                  {singleUploadProgress.isUploading ? (
+                    <div className="flex flex-col items-center gap-3 py-2 max-w-md mx-auto">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner animate-pulse">
+                        <Upload className="w-6 h-6 animate-bounce" />
+                      </div>
+                      <div className="w-full space-y-2">
+                        <div className="flex items-center justify-between text-xs font-semibold">
+                          <span className="text-white flex items-center gap-1.5">
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                            Sedang Memproses Berkas Ijazah...
+                          </span>
+                          <span className="font-mono text-emerald-400 font-bold text-sm">
+                            {singleUploadProgress.percent}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-950 rounded-full h-3 p-0.5 border border-slate-800 overflow-hidden shadow-inner">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.max(5, singleUploadProgress.percent)}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-slate-400">
+                          <span className="truncate max-w-[280px]">
+                            {singleUploadProgress.stage}
+                          </span>
+                          <span className="shrink-0 font-mono text-slate-300">
+                            {singleUploadProgress.fileSizeStr}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-slate-200 text-sm">
-                        Klik untuk pilih berkas PDF Ijazah
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Mendukung berkas ijazah format .pdf (Pilih 1 untuk editor visual, atau beberapa untuk Batch Signing)
-                      </p>
+                  ) : (
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-200 text-sm">
+                          Klik untuk pilih berkas PDF Ijazah
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Mendukung berkas ijazah format .pdf (Pilih 1 untuk editor visual, atau beberapa untuk Batch Signing)
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </label>
 
             {/* Quick Sample Buttons */}
@@ -828,7 +940,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                   className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition flex items-center gap-2 shadow"
                 >
                   <GraduationCap className="w-4 h-4 text-emerald-400" />
-                  <span>Muat Contoh Ijazah SD (IJZ-111202663419179_sign.pdf)</span>
+                  <span>Contoh Ijazah</span>
                 </button>
                 <button
                   type="button"
@@ -836,7 +948,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                   className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-semibold transition flex items-center gap-2 shadow"
                 >
                   <FileText className="w-4 h-4 text-cyan-400" />
-                  <span>Muat Contoh Transkrip Nilai (TRN-111202663419179_sign.pdf)</span>
+                  <span>Contoh Transkrip</span>
                 </button>
               </div>
             </div>
@@ -885,7 +997,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                 }`}
               >
                 <Eye className="w-3.5 h-3.5" />
-                <span>{isPreviewFinal ? 'Mode Edit / Geser Barcode' : 'Preview Tampilan Final'}</span>
+                <span>{isPreviewFinal ? 'Mode Edit' : 'Preview'}</span>
               </button>
 
               <button
@@ -893,7 +1005,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5"
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span>Tempel Barcode & Simpan Ijazah</span>
+                <span>Simpan Ijazah</span>
               </button>
             </div>
           </div>
@@ -1009,7 +1121,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                         title="Acak token baru"
                       >
                         <RefreshCw className="w-3 h-3" />
-                        <span>Acak Token Baru</span>
+                        <span>Acak Token</span>
                       </button>
                     </div>
                     <div className="bg-slate-950 border border-emerald-800/60 rounded-lg px-2.5 py-1.5 font-mono text-emerald-300 font-bold text-xs flex items-center justify-between">
@@ -1048,35 +1160,35 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                       onClick={() => handlePresetPosition('default-ijazah')}
                       className="col-span-2 px-2.5 py-2 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-200 border border-emerald-500/50 text-[11px] font-bold text-center transition flex items-center justify-center gap-1.5 shadow"
                     >
-                      <span>🎯 Posisi Default Ijazah (X:346, Y:622, Ukuran: 85)</span>
+                      <span>Posisi Default Ijazah</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePresetPosition('bottom-right')}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-left transition"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-center transition"
                     >
-                      📍 Kanan Bawah
+                      Kanan Bawah
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePresetPosition('bottom-left')}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-left transition"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-center transition"
                     >
-                      📍 Kiri Bawah
+                      Kiri Bawah
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePresetPosition('bottom-center')}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-left transition"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-center transition"
                     >
-                      📍 Tengah Bawah
+                      Tengah Bawah
                     </button>
                     <button
                       type="button"
                       onClick={() => handlePresetPosition('top-right')}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-left transition"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-center transition"
                     >
-                      📍 Kanan Atas
+                      Kanan Atas
                     </button>
                   </div>
                 </div>
@@ -1412,7 +1524,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                   className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-semibold text-xs transition flex items-center gap-2"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  <span>Cek Halaman Verifikasi</span>
+                  <span>Verifikasi</span>
                 </button>
               )}
 
@@ -1421,7 +1533,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                   onClick={onGoToSavedDocs}
                   className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium text-xs transition"
                 >
-                  <span>Daftar Dokumen Tersimpan</span>
+                  <span>Dokumen Tersimpan</span>
                 </button>
               )}
 
@@ -1437,7 +1549,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                 className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs border border-slate-700 transition flex items-center gap-2"
               >
                 <Upload className="w-4 h-4" />
-                <span>Upload Ijazah Lainnya</span>
+                <span>Upload Lagi</span>
               </button>
             </div>
           </div>
@@ -1539,12 +1651,12 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                 {isSaving ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Memproses Dokumen...</span>
+                    <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Lanjutkan Simpan & Tempel</span>
+                    <span>Simpan</span>
                   </>
                 )}
               </button>
@@ -1553,6 +1665,95 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
         </div>
       )}
         </>
+      )}
+
+      {/* MODAL OVERLAY: INDIKATOR PROGRES UPLOAD & EKSTRAKSI IJAZAH */}
+      {singleUploadProgress.isUploading && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl shadow-emerald-950/50 space-y-5 text-center relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Top glowing bar */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
+
+            {/* Icon */}
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-emerald-500/20 animate-ping opacity-30" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                {singleUploadProgress.isComplete ? (
+                  <CheckCircle2 className="w-8 h-8 text-white animate-bounce" />
+                ) : (
+                  <Upload className="w-8 h-8 text-white animate-pulse" />
+                )}
+              </div>
+            </div>
+
+            {/* Title & Info */}
+            <div className="space-y-1">
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                {singleUploadProgress.isComplete
+                  ? 'Upload Berhasil!'
+                  : 'Sedang Mengunggah & Memproses Ijazah'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {singleUploadProgress.isComplete
+                  ? 'Berkas telah siap dan sedang dialihkan ke editor visual...'
+                  : 'Mengekstrak data ijazah, nomor & menyiapkan verifikasi'}
+              </p>
+            </div>
+
+            {/* Big Percent Badge */}
+            <div className="py-1">
+              <div className="inline-flex items-baseline gap-1.5 px-5 py-2 rounded-2xl bg-emerald-950/70 border border-emerald-500/30 shadow-inner">
+                <span className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300 font-mono tracking-tight">
+                  {singleUploadProgress.percent}%
+                </span>
+                <span className="text-xs text-emerald-400 font-bold uppercase tracking-wider">
+                  {singleUploadProgress.isComplete ? 'Selesai' : 'Terunggah'}
+                </span>
+              </div>
+            </div>
+
+            {/* Glowing Animated Progress Bar */}
+            <div className="space-y-2">
+              <div className="w-full bg-slate-950 rounded-full h-3.5 p-0.5 border border-slate-800 shadow-inner overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 rounded-full transition-all duration-300 relative shadow-md shadow-emerald-500/50"
+                  style={{ width: `${Math.max(4, singleUploadProgress.percent)}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono px-1">
+                <span className="truncate max-w-[200px]">
+                  {singleUploadProgress.fileSizeStr || 'Dokumen PDF'}
+                </span>
+                <span className="text-emerald-400 font-bold">
+                  {singleUploadProgress.percent}%
+                </span>
+              </div>
+            </div>
+
+            {/* Current File and Action Box */}
+            <div className="bg-slate-950/80 rounded-2xl p-3.5 border border-slate-800/80 text-left space-y-1.5">
+              <div className="flex items-center gap-2 overflow-hidden text-xs text-slate-300">
+                <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate font-mono font-medium" title={singleUploadProgress.fileName}>
+                  {singleUploadProgress.fileName || 'Memproses ijazah...'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                <RefreshCw
+                  className={`w-3 h-3 text-teal-400 shrink-0 ${
+                    singleUploadProgress.isComplete ? '' : 'animate-spin'
+                  }`}
+                />
+                <span className="truncate text-slate-300">
+                  {singleUploadProgress.stage}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -365,7 +365,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
             }`}
           >
             <Upload className="w-4 h-4" />
-            <span>Upload File TTD (Bisa Banyak)</span>
+            <span>Upload File</span>
           </button>
 
           <button
@@ -381,7 +381,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
             }`}
           >
             <Cloud className="w-4 h-4" />
-            <span>Koleksi TTD Cloud ({storedSignatures.length})</span>
+            <span>Koleksi TTD</span>
           </button>
 
           <button
@@ -394,7 +394,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
             }`}
           >
             <PenTool className="w-4 h-4" />
-            <span>Goreskan Tangan</span>
+            <span>Gores Tangan</span>
           </button>
 
           <button
@@ -544,7 +544,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                       className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition"
                     >
                       <Database className="w-4 h-4" />
-                      <span>Simpan Semua ke IndexedDB & Siapkan untuk Dokumen</span>
+                      <span>Simpan Semua</span>
                     </button>
                   </div>
                 </div>
@@ -573,7 +573,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow transition"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  <span>+ Upload TTD Baru</span>
+                  <span>Upload TTD</span>
                 </button>
               </div>
 
@@ -595,7 +595,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                     onClick={() => setActiveTab('upload')}
                     className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-500 shadow"
                   >
-                    Mulai Upload Tanda Tangan
+                    Upload TTD
                   </button>
                 </div>
               ) : (
@@ -742,7 +742,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                 disabled={!hasDrawn}
                 className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-xs transition shadow"
               >
-                Simpan ke IndexedDB & Gunakan Tanda Tangan
+                Gunakan Tanda Tangan
               </button>
             </div>
           )}
@@ -792,7 +792,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
                 onClick={handleSaveTypedSignature}
                 className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow"
               >
-                Simpan ke IndexedDB & Gunakan Tanda Tangan
+                Gunakan Tanda Tangan
               </button>
             </div>
           )}

@@ -134,6 +134,23 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
   const [exportProgressText, setExportProgressText] = useState<string>('');
   const [exportPercent, setExportPercent] = useState<number>(0);
 
+  // Upload Progress State
+  const [uploadProgress, setUploadProgress] = useState<{
+    isUploading: boolean;
+    percent: number;
+    stage: string;
+    fileName: string;
+    fileSizeStr: string;
+    isComplete: boolean;
+  }>({
+    isUploading: false,
+    percent: 0,
+    stage: '',
+    fileName: '',
+    fileSizeStr: '',
+    isComplete: false
+  });
+
   // Finalized Result
   const [finalizedDoc, setFinalizedDoc] = useState<VerifiedDocument | null>(null);
   const [finalPdfBytes, setFinalPdfBytes] = useState<Uint8Array | null>(null);
@@ -238,7 +255,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
     };
   }, [pdfBytes, currentPage, zoomScale]);
 
-  // Handle file upload
+  // Handle file upload with progress tracking
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -248,13 +265,41 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
       return;
     }
 
+    const sizeStr = `${(file.size / 1024).toFixed(1)} KB`;
+    setUploadProgress({
+      isUploading: true,
+      percent: 10,
+      stage: `Membaca berkas PDF (${sizeStr})...`,
+      fileName: file.name,
+      fileSizeStr: sizeStr,
+      isComplete: false
+    });
+
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onprogress = (ev) => {
+      if (ev.lengthComputable && ev.total > 0) {
+        const percent = Math.min(60, Math.round((ev.loaded / ev.total) * 60));
+        setUploadProgress((prev) => ({
+          ...prev,
+          percent: Math.max(prev.percent, percent),
+          stage: `Mengunggah berkas (${((ev.loaded / 1024)).toFixed(0)} KB)...`
+        }));
+      }
+    };
+
+    reader.onload = async (ev) => {
       const arrBuffer = ev.target?.result as ArrayBuffer;
       const bytes = new Uint8Array(arrBuffer);
+
+      setUploadProgress((prev) => ({
+        ...prev,
+        percent: 75,
+        stage: 'Menganalisis konten & nomor dokumen...'
+      }));
+
       setPdfBytes(bytes);
       setOriginalFileName(file.name);
-      setFileSizeStr(`${(file.size / 1024).toFixed(1)} KB`);
+      setFileSizeStr(sizeStr);
 
       // Auto-fill document name from file name if blank and ensure settings defaults
       const settings = getAppSettings();
@@ -269,17 +314,36 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
       }));
 
       // Auto-detect letter number (Nomor Surat) from PDF content after "Nomor:"
-      extractNomorSuratFromPdf(bytes).then((detectedNo) => {
+      try {
+        const detectedNo = await extractNomorSuratFromPdf(bytes);
         if (detectedNo) {
           setFormData((prev) => ({
             ...prev,
             documentNumber: detectedNo
           }));
         }
-      });
+      } catch {
+        //
+      }
+
+      setUploadProgress((prev) => ({
+        ...prev,
+        percent: 100,
+        stage: 'Selesai! Berkas siap ditandatangani.',
+        isComplete: true
+      }));
+
+      await new Promise((res) => setTimeout(res, 500));
 
       setStep('form_and_editor');
+      setUploadProgress((prev) => ({ ...prev, isUploading: false }));
     };
+
+    reader.onerror = () => {
+      alert('Gagal membaca berkas PDF');
+      setUploadProgress((prev) => ({ ...prev, isUploading: false }));
+    };
+
     reader.readAsArrayBuffer(file);
   };
 
@@ -532,22 +596,64 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
           </div>
 
           {/* Upload Area */}
-          <div className="border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-3xl p-10 text-center transition bg-slate-900/40 relative group flex flex-col items-center justify-center cursor-pointer shadow-xl">
+          <div
+            className={`border-2 border-dashed rounded-3xl p-10 text-center transition bg-slate-900/40 relative group flex flex-col items-center justify-center shadow-xl ${
+              uploadProgress.isUploading
+                ? 'border-emerald-500 bg-emerald-950/20 cursor-wait'
+                : 'border-slate-700 hover:border-emerald-500 cursor-pointer'
+            }`}
+          >
             <input
               type="file"
               accept=".pdf,application/pdf"
+              disabled={uploadProgress.isUploading}
               onChange={handleFileUpload}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
-            <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 group-hover:scale-105 transition">
-              <Upload className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-white">Seret file PDF ke sini atau klik untuk memilih file</h3>
-            <p className="text-xs text-slate-400 mt-1">Format yang diperbolehkan: PDF (Maks. 25 MB)</p>
-            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-xs text-slate-300 border border-slate-700">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Dokumen asli Anda tetap aman & tidak diubah</span>
-            </div>
+            {uploadProgress.isUploading ? (
+              <div className="flex flex-col items-center gap-3 py-2 max-w-md w-full mx-auto">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner animate-pulse">
+                  <Upload className="w-7 h-7 animate-bounce" />
+                </div>
+                <div className="w-full space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <span className="text-white flex items-center gap-1.5">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                      Sedang Memproses Dokumen...
+                    </span>
+                    <span className="font-mono text-emerald-400 font-bold text-sm">
+                      {uploadProgress.percent}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-950 rounded-full h-3 p-0.5 border border-slate-800 overflow-hidden shadow-inner">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.max(5, uploadProgress.percent)}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span className="truncate max-w-[260px]">
+                      {uploadProgress.stage}
+                    </span>
+                    <span className="shrink-0 font-mono text-slate-300">
+                      {uploadProgress.fileSizeStr}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 group-hover:scale-105 transition">
+                  <Upload className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-white">Seret file PDF ke sini atau klik untuk memilih file</h3>
+                <p className="text-xs text-slate-400 mt-1">Format yang diperbolehkan: PDF (Maks. 25 MB)</p>
+                <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-xs text-slate-300 border border-slate-700">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>Dokumen asli Anda tetap aman & tidak diubah</span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Quick Sample Option */}
@@ -558,7 +664,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
               className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-emerald-400 border border-slate-700 transition flex items-center gap-1.5"
             >
               <FileText className="w-4 h-4" />
-              <span>Gunakan Dokumen Contoh (Surat Resmi)</span>
+              <span>Contoh Surat</span>
             </button>
           </div>
         </div>
@@ -608,7 +714,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                   }`}
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>{isPreviewFinal ? 'Kembali ke Mode Edit' : 'Preview Dokumen Final'}</span>
+                  <span>{isPreviewFinal ? 'Mode Edit' : 'Preview'}</span>
                 </button>
               )}
 
@@ -618,7 +724,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5"
                 >
                   <ShieldCheck className="w-4 h-4" />
-                  <span>Tandatangani & Simpan</span>
+                  <span>Simpan</span>
                 </button>
               )}
             </div>
@@ -723,7 +829,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                     className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2"
                   >
                     <QrCode className="w-4 h-4" />
-                    <span>{isQrGenerated ? 'PERBARUI QR CODE UNIK' : 'GENERATE QR CODE'}</span>
+                    <span>{isQrGenerated ? 'Perbarui QR' : 'Generate QR'}</span>
                   </button>
                   {isQrGenerated && (
                     <div className="mt-2 p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-800/40 text-[11px] text-emerald-300 flex items-center justify-between">
@@ -947,7 +1053,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                         onClick={handlePlaceQrOnCurrentPage}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] shadow transition"
                       >
-                        <span>📍 Pindahkan Barcode ke Hal. {currentPage}</span>
+                        <span>Pindah ke Hal. {currentPage}</span>
                       </button>
                     )}
                   </div>
@@ -1178,7 +1284,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                   className="py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Download PDF Final</span>
+                  <span>Download PDF</span>
                 </button>
               )}
 
@@ -1193,7 +1299,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                   className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Download Gambar QR</span>
+                  <span>Download QR</span>
                 </button>
               )}
 
@@ -1202,7 +1308,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                 className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition flex items-center justify-center gap-2"
               >
                 {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span>{copiedLink ? 'Tautan Disalin!' : 'Salin Link Verifikasi'}</span>
+                <span>{copiedLink ? 'Tersalin' : 'Salin Link'}</span>
               </button>
 
               <button
@@ -1216,7 +1322,7 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                 className="py-3 px-4 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 font-semibold text-xs border border-emerald-800/50 transition flex items-center justify-center gap-2"
               >
                 <ExternalLink className="w-4 h-4" />
-                <span>Buka Halaman Verifikasi</span>
+                <span>Verifikasi</span>
               </button>
             </div>
 
@@ -1229,14 +1335,14 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                 }}
                 className="text-xs text-slate-400 hover:text-white transition flex items-center gap-1.5"
               >
-                <span>Buat Dokumen Lain</span>
+                <span>Buat Baru</span>
               </button>
               {onGoToSavedDocs && (
                 <button
                   onClick={onGoToSavedDocs}
                   className="text-xs text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1.5"
                 >
-                  <span>Lihat Dokumen Tersimpan</span>
+                  <span>Dokumen Tersimpan</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -1384,15 +1490,104 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                 {isExporting ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Memproses Dokumen...</span>
+                    <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    <span>Finalisasi Dokumen</span>
+                    <span>Simpan</span>
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL OVERLAY: INDIKATOR PROGRES UPLOAD DOKUMEN */}
+      {uploadProgress.isUploading && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-emerald-500/40 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl shadow-emerald-950/50 space-y-5 text-center relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Top glowing bar */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
+
+            {/* Icon */}
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-emerald-500/20 animate-ping opacity-30" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                {uploadProgress.isComplete ? (
+                  <CheckCircle2 className="w-8 h-8 text-white animate-bounce" />
+                ) : (
+                  <Upload className="w-8 h-8 text-white animate-pulse" />
+                )}
+              </div>
+            </div>
+
+            {/* Title & Info */}
+            <div className="space-y-1">
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                {uploadProgress.isComplete
+                  ? 'Upload Berhasil!'
+                  : 'Sedang Mengunggah & Memproses Dokumen'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {uploadProgress.isComplete
+                  ? 'Berkas telah siap dan sedang dialihkan ke editor visual...'
+                  : 'Menganalisis lembar dokumen PDF & menyiapkan penandatanganan'}
+              </p>
+            </div>
+
+            {/* Big Percent Badge */}
+            <div className="py-1">
+              <div className="inline-flex items-baseline gap-1.5 px-5 py-2 rounded-2xl bg-emerald-950/70 border border-emerald-500/30 shadow-inner">
+                <span className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-300 font-mono tracking-tight">
+                  {uploadProgress.percent}%
+                </span>
+                <span className="text-xs text-emerald-400 font-bold uppercase tracking-wider">
+                  {uploadProgress.isComplete ? 'Selesai' : 'Terunggah'}
+                </span>
+              </div>
+            </div>
+
+            {/* Glowing Animated Progress Bar */}
+            <div className="space-y-2">
+              <div className="w-full bg-slate-950 rounded-full h-3.5 p-0.5 border border-slate-800 shadow-inner overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 rounded-full transition-all duration-300 relative shadow-md shadow-emerald-500/50"
+                  style={{ width: `${Math.max(4, uploadProgress.percent)}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono px-1">
+                <span className="truncate max-w-[200px]">
+                  {uploadProgress.fileSizeStr || 'Dokumen PDF'}
+                </span>
+                <span className="text-emerald-400 font-bold">
+                  {uploadProgress.percent}%
+                </span>
+              </div>
+            </div>
+
+            {/* Current File and Action Box */}
+            <div className="bg-slate-950/80 rounded-2xl p-3.5 border border-slate-800/80 text-left space-y-1.5">
+              <div className="flex items-center gap-2 overflow-hidden text-xs text-slate-300">
+                <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="truncate font-mono font-medium" title={uploadProgress.fileName}>
+                  {uploadProgress.fileName || 'Memproses dokumen...'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                <RefreshCw
+                  className={`w-3 h-3 text-teal-400 shrink-0 ${
+                    uploadProgress.isComplete ? '' : 'animate-spin'
+                  }`}
+                />
+                <span className="truncate text-slate-300">
+                  {uploadProgress.stage}
+                </span>
+              </div>
             </div>
           </div>
         </div>
