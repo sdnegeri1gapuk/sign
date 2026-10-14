@@ -470,19 +470,38 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
       setBatchItems([...updatedItems]);
 
       try {
-        // 1. Tempelkan QR code ke lembar PDF dengan metadata masing-masing
+        // 1. Tempelkan QR code ke lembar PDF dengan metadata masing-masing:
+        // Jika dokumen adalah Transkrip dan posisi masih menggunakan default Ijazah (346, 622),
+        // otomatis gunakan posisi default Transkrip (344, 662)
+        const isItemTranskrip = item.documentType?.toLowerCase().includes('transkrip');
+        const itemBarcodePos =
+          isItemTranskrip && qrSettings.x === 346 && qrSettings.y === 622
+            ? { x: 344, y: 662 }
+            : { x: qrSettings.x, y: qrSettings.y };
+
+        const itemQrSettings: QrPlacementSettings = {
+          ...qrSettings,
+          x: itemBarcodePos.x,
+          y: itemBarcodePos.y,
+          labelText: qrSettings.showLabel
+            ? isItemTranskrip
+              ? 'Scan Verifikasi Transkrip'
+              : 'Scan Verifikasi Ijazah'
+            : qrSettings.labelText
+        };
+
         let finalBytes: Uint8Array;
         if (exportMode === 'flattened') {
           finalBytes = await exportFlattenedWithQrCode(
             item.pdfBytes,
             item.qrDataUrl,
-            qrSettings
+            itemQrSettings
           );
         } else {
           finalBytes = await exportOriginalWithQrCode(
             item.pdfBytes,
             item.qrDataUrl,
-            qrSettings
+            itemQrSettings
           );
         }
 
@@ -713,7 +732,34 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
         {showSettingsAccordion && (
           <div className="mt-5 pt-5 border-t border-slate-800/80 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
             <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800/60 space-y-2">
-              <span className="text-slate-400 font-semibold block">Posisi Barcode Default</span>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold block">Posisi Barcode</span>
+                <span className="text-[10px] text-slate-500 font-mono">X:{qrSettings.x} Y:{qrSettings.y}</span>
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setQrSettings({ ...qrSettings, x: 346, y: 622 })}
+                  className={`flex-1 py-1 px-1.5 rounded-lg text-[10px] font-bold border transition ${
+                    qrSettings.x === 346 && qrSettings.y === 622
+                      ? 'bg-emerald-600/30 text-emerald-200 border-emerald-500/60'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border-slate-800'
+                  }`}
+                >
+                  Ijazah (346, 622)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQrSettings({ ...qrSettings, x: 344, y: 662 })}
+                  className={`flex-1 py-1 px-1.5 rounded-lg text-[10px] font-bold border transition ${
+                    qrSettings.x === 344 && qrSettings.y === 662
+                      ? 'bg-cyan-600/30 text-cyan-200 border-cyan-500/60'
+                      : 'bg-slate-900 text-slate-400 hover:text-white border-slate-800'
+                  }`}
+                >
+                  Transkrip (344, 662)
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] text-slate-500 block">Posisi X (pt)</label>
@@ -738,8 +784,8 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                   />
                 </div>
               </div>
-              <p className="text-[10px] text-emerald-400">
-                Default: X: 346, Y: 622 (sesuai lembar tanda tangan)
+              <p className="text-[10px] text-emerald-400/90 leading-tight">
+                ✓ Otomatis: Ijazah -&gt; X: 346, Y: 622 | Transkrip -&gt; X: 344, Y: 662
               </p>
             </div>
 
@@ -1344,6 +1390,61 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
                     setEditingItem({ ...editingItem, documentDate: e.target.value })
                   }
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-400 font-semibold">Jenis Dokumen</label>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {editingItem.documentType?.toLowerCase().includes('transkrip')
+                      ? 'Posisi: X: 344, Y: 662'
+                      : 'Posisi: X: 346, Y: 622'}
+                  </span>
+                </div>
+                <div className="flex gap-2 mb-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingItem({
+                        ...editingItem,
+                        documentType: 'Ijazah',
+                        documentName: editingItem.documentName.replace(/^Transkrip/i, 'Ijazah')
+                      })
+                    }
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition ${
+                      !editingItem.documentType?.toLowerCase().includes('transkrip')
+                        ? 'bg-emerald-600/30 text-emerald-200 border-emerald-500/60 shadow'
+                        : 'bg-slate-800 text-slate-400 hover:text-white border-slate-700'
+                    }`}
+                  >
+                    Ijazah (Default 346, 622)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingItem({
+                        ...editingItem,
+                        documentType: 'Transkrip',
+                        documentName: editingItem.documentName.replace(/^Ijazah/i, 'Transkrip')
+                      })
+                    }
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition ${
+                      editingItem.documentType?.toLowerCase().includes('transkrip')
+                        ? 'bg-cyan-600/30 text-cyan-200 border-cyan-500/60 shadow'
+                        : 'bg-slate-800 text-slate-400 hover:text-white border-slate-700'
+                    }`}
+                  >
+                    Transkrip (Default 344, 662)
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={editingItem.documentType}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, documentType: e.target.value })
+                  }
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-white text-xs"
                 />
               </div>
 

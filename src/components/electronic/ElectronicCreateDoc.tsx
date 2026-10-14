@@ -27,6 +27,7 @@ import {
   Calendar,
   Hash,
   UserCheck,
+  CheckCircle2,
   Link as LinkIcon
 } from 'lucide-react';
 import {
@@ -156,8 +157,11 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
   const [finalPdfBytes, setFinalPdfBytes] = useState<Uint8Array | null>(null);
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
-  // Canvas Refs
+  // Canvas Refs & Rendering State
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [canvasElement, setCanvasElement] = useState<HTMLCanvasElement | null>(null);
+  const [isRenderingPage, setIsRenderingPage] = useState<boolean>(false);
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Drag & Resize state
@@ -214,13 +218,16 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
     };
   }, [pdfBytes]);
 
-  // Render current PDF page to canvas
+  // Render current PDF page to canvas with high sharpness
   useEffect(() => {
-    if (!pdfBytes || !canvasRef.current) return;
+    if (step !== 'form_and_editor' || !pdfBytes || !canvasElement) return;
     const currentBytes = pdfBytes;
 
     let isMounted = true;
+    let renderTask: any = null;
+
     async function renderPage() {
+      setIsRenderingPage(true);
       try {
         const loadingTask = pdfjsLib.getDocument({
           data: currentBytes.slice(0),
@@ -228,12 +235,18 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
         });
         const doc = await loadingTask.promise;
         const page = await doc.getPage(currentPage);
-        if (!isMounted || !canvasRef.current) return;
+        if (!isMounted || !canvasElement) {
+          setIsRenderingPage(false);
+          return;
+        }
 
         const viewport = page.getViewport({ scale: zoomScale });
-        const canvas = canvasRef.current;
+        const canvas = canvasElement;
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (!ctx) {
+          setIsRenderingPage(false);
+          return;
+        }
 
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -243,17 +256,31 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
           viewport,
           canvas
         };
-        await page.render(renderContext).promise;
-      } catch (err) {
-        console.error('Render page error', err);
+        renderTask = page.render(renderContext);
+        await renderTask.promise;
+      } catch (err: any) {
+        if (err?.name !== 'RenderingCancelledException') {
+          console.error('Render page error', err);
+        }
+      } finally {
+        if (isMounted) {
+          setIsRenderingPage(false);
+        }
       }
     }
 
     renderPage();
     return () => {
       isMounted = false;
+      if (renderTask && typeof renderTask.cancel === 'function') {
+        try {
+          renderTask.cancel();
+        } catch {
+          // ignore cancel error
+        }
+      }
     };
-  }, [pdfBytes, currentPage, zoomScale]);
+  }, [step, pdfBytes, canvasElement, currentPage, zoomScale]);
 
   // Handle file upload with progress tracking
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,6 +353,20 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
         //
       }
 
+      // Auto-generate verification token & QR code immediately so preview & save are ready
+      try {
+        const token = generateUniqueToken();
+        const url = generateVerificationUrl(token);
+        const qrData = await generateQrCodeDataUrl(url);
+
+        setVerificationToken(token);
+        setVerificationUrl(url);
+        setQrDataUrl(qrData);
+        setIsQrGenerated(true);
+      } catch (qrErr) {
+        console.error('Failed to auto-generate QR code', qrErr);
+      }
+
       setUploadProgress((prev) => ({
         ...prev,
         percent: 100,
@@ -374,6 +415,20 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
         }));
       }
     });
+
+    // Auto-generate verification token & QR code for sample
+    try {
+      const token = generateUniqueToken();
+      const url = generateVerificationUrl(token);
+      const qrData = await generateQrCodeDataUrl(url);
+
+      setVerificationToken(token);
+      setVerificationUrl(url);
+      setQrDataUrl(qrData);
+      setIsQrGenerated(true);
+    } catch (qrErr) {
+      console.error('Failed to generate sample QR code', qrErr);
+    }
 
     setStep('form_and_editor');
   };
@@ -597,8 +652,32 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
 
           {/* Upload Area */}
           <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOver(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDragOver(false);
+              const files = e.dataTransfer.files;
+              if (files && files.length > 0) {
+                const fakeEvent = {
+                  target: { files }
+                } as unknown as React.ChangeEvent<HTMLInputElement>;
+                handleFileUpload(fakeEvent);
+              }
+            }}
             className={`border-2 border-dashed rounded-3xl p-10 text-center transition bg-slate-900/40 relative group flex flex-col items-center justify-center shadow-xl ${
-              uploadProgress.isUploading
+              isDragOver
+                ? 'border-emerald-400 bg-emerald-950/30 ring-4 ring-emerald-500/20 scale-[1.01]'
+                : uploadProgress.isUploading
                 ? 'border-emerald-500 bg-emerald-950/20 cursor-wait'
                 : 'border-slate-700 hover:border-emerald-500 cursor-pointer'
             }`}
@@ -607,6 +686,10 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
               type="file"
               accept=".pdf,application/pdf"
               disabled={uploadProgress.isUploading}
+              onClick={(e) => {
+                // allow selecting the same file again
+                (e.target as HTMLInputElement).value = '';
+              }}
               onChange={handleFileUpload}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
@@ -1144,7 +1227,23 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                   }}
                 >
                   {/* PDF Canvas */}
-                  <canvas ref={canvasRef} className="block w-full h-full pointer-events-none" />
+                  <canvas
+                    ref={(el) => {
+                      canvasRef.current = el;
+                      setCanvasElement(el);
+                    }}
+                    className="block w-full h-full pointer-events-none"
+                  />
+
+                  {/* Rendering Loading Spinner */}
+                  {isRenderingPage && (
+                    <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex flex-col items-center justify-center gap-2 z-20 pointer-events-none transition-opacity">
+                      <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin" />
+                      <span className="text-xs font-semibold text-slate-800 bg-white/90 px-3 py-1 rounded-full shadow border border-slate-200">
+                        Memuat Pratinjau Dokumen...
+                      </span>
+                    </div>
+                  )}
 
                   {/* QR Code Overlay (Shown on target page) */}
                   {isQrGenerated && qrSettings.pageNumber === currentPage && (

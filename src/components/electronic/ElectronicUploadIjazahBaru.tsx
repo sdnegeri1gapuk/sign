@@ -50,6 +50,21 @@ import {
 } from '../../utils/pdfElectronicExport';
 import { ElectronicBatchSigningIjazah } from './ElectronicBatchSigningIjazah';
 
+/**
+ * Posisi default barcode:
+ * - Dokumen Ijazah: default X: 346, Y: 622 (posisi standar saat ini)
+ * - Dokumen Transkrip: default X: 344, Y: 662 (sesuai instruksi)
+ */
+export const getDefaultBarcodePosition = (
+  documentType: string = 'Ijazah'
+): { x: number; y: number } => {
+  const isTranscript = documentType?.toLowerCase().includes('transkrip');
+  if (isTranscript) {
+    return { x: 344, y: 662 };
+  }
+  return { x: 346, y: 622 };
+};
+
 interface ElectronicUploadIjazahBaruProps {
   onDocumentImported?: (newDoc: VerifiedDocument) => void;
   onGoToSavedDocs?: () => void;
@@ -124,15 +139,20 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
 
   // QR Code Placement Settings:
   // Sesuai permintaan:
-  // Default: posisi x: 346, y: 622, ukuran: 85, tampilkan label keterangan = OFF (false)
-  const [qrSettings, setQrSettings] = useState<QrPlacementSettings>({
-    pageNumber: 1,
-    x: 346,
-    y: 622,
-    width: 85,
-    height: 85,
-    showLabel: false,
-    labelText: 'Scan Verifikasi Ijazah'
+  // - Ijazah: default x: 346, y: 622 (posisi standar yang sekarang)
+  // - Transkrip: default x: 344, y: 662
+  // Ukuran: 85, tampilkan label keterangan = OFF (false)
+  const [qrSettings, setQrSettings] = useState<QrPlacementSettings>(() => {
+    const pos = getDefaultBarcodePosition('Ijazah');
+    return {
+      pageNumber: 1,
+      x: pos.x,
+      y: pos.y,
+      width: 85,
+      height: 85,
+      showLabel: false,
+      labelText: 'Scan Verifikasi Ijazah'
+    };
   });
 
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -334,15 +354,20 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
       setQrDataUrl(qrData);
       setIsQrGenerated(true);
 
-      // Default barcode: x: 346, y: 622, width: 85, height: 85, showLabel: false
+      // Default barcode:
+      // Jika dokumen Ijazah: X: 346, Y: 622
+      // Jika dokumen Transkrip: X: 344, Y: 662
+      const isTranscript = extracted.documentType?.toLowerCase().includes('transkrip');
+      const defaultBarcodePos = getDefaultBarcodePosition(extracted.documentType);
+
       setQrSettings({
         pageNumber: 1,
-        x: 346,
-        y: 622,
+        x: defaultBarcodePos.x,
+        y: defaultBarcodePos.y,
         width: 85,
         height: 85,
         showLabel: false,
-        labelText: 'Scan Verifikasi Ijazah'
+        labelText: isTranscript ? 'Scan Verifikasi Transkrip' : 'Scan Verifikasi Ijazah'
       });
 
       setSingleUploadProgress((prev) => ({
@@ -493,15 +518,16 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
     setQrDataUrl(qrData);
     setIsQrGenerated(true);
 
-    // Default barcode: x: 346, y: 622, width: 85, height: 85, showLabel: false
+    // Default barcode Transkrip: x: 344, y: 662, width: 85, height: 85, showLabel: false
+    const pos = getDefaultBarcodePosition('Transkrip');
     setQrSettings({
       pageNumber: 1,
-      x: 346,
-      y: 622,
+      x: pos.x, // 344
+      y: pos.y, // 662
       width: 85,
       height: 85,
       showLabel: false,
-      labelText: 'Scan Verifikasi Ijazah'
+      labelText: 'Scan Verifikasi Transkrip'
     });
 
     try {
@@ -529,7 +555,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
 
   // Preset placement positioning helpers
   const handlePresetPosition = (
-    position: 'default-ijazah' | 'bottom-right' | 'bottom-left' | 'top-right' | 'bottom-center'
+    position: 'default-ijazah' | 'default-transkrip' | 'bottom-right' | 'bottom-left' | 'top-right' | 'bottom-center'
   ) => {
     const currentPageDim = pageDimensions[currentPage - 1] || { width: 595, height: 842 };
     const w = 85;
@@ -541,6 +567,9 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
     if (position === 'default-ijazah') {
       newX = 346;
       newY = 622;
+    } else if (position === 'default-transkrip') {
+      newX = 344;
+      newY = 662;
     } else if (position === 'bottom-right') {
       // Area ttd Kepala Sekolah (Kanan Bawah)
       newX = Math.max(20, Math.floor(currentPageDim.width - w - 45));
@@ -1040,13 +1069,75 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-slate-400 block mb-1 font-medium">2. Jenis Dokumen</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-slate-400 font-medium">2. Jenis Dokumen</label>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          {formData.documentType?.toLowerCase().includes('transkrip') ? '(X:344 Y:662)' : '(X:346 Y:622)'}
+                        </span>
+                      </div>
+                      <div className="flex gap-1 mb-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newType = 'Ijazah';
+                            setFormData((prev) => ({
+                              ...prev,
+                              documentType: newType,
+                              documentName: prev.documentName.replace(/^Transkrip/i, 'Ijazah')
+                            }));
+                            const pos = getDefaultBarcodePosition(newType);
+                            setQrSettings((prev) => ({
+                              ...prev,
+                              x: pos.x,
+                              y: pos.y,
+                              labelText: 'Scan Verifikasi Ijazah'
+                            }));
+                          }}
+                          className={`flex-1 py-1 px-1 rounded-md text-[10px] font-bold transition border ${
+                            !formData.documentType?.toLowerCase().includes('transkrip')
+                              ? 'bg-emerald-600 text-white border-emerald-500 shadow'
+                              : 'bg-slate-800 text-slate-400 hover:text-white border-slate-700'
+                          }`}
+                        >
+                          Ijazah
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newType = 'Transkrip';
+                            setFormData((prev) => ({
+                              ...prev,
+                              documentType: newType,
+                              documentName: prev.documentName.replace(/^Ijazah/i, 'Transkrip')
+                            }));
+                            const pos = getDefaultBarcodePosition(newType);
+                            setQrSettings((prev) => ({
+                              ...prev,
+                              x: pos.x,
+                              y: pos.y,
+                              labelText: 'Scan Verifikasi Transkrip'
+                            }));
+                          }}
+                          className={`flex-1 py-1 px-1 rounded-md text-[10px] font-bold transition border ${
+                            formData.documentType?.toLowerCase().includes('transkrip')
+                              ? 'bg-cyan-600 text-white border-cyan-500 shadow'
+                              : 'bg-slate-800 text-slate-400 hover:text-white border-slate-700'
+                          }`}
+                        >
+                          Transkrip
+                        </button>
+                      </div>
                       <input
                         type="text"
                         value={formData.documentType}
-                        onChange={(e) => setFormData({ ...formData, documentType: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData({ ...formData, documentType: val });
+                          const pos = getDefaultBarcodePosition(val);
+                          setQrSettings((prev) => ({ ...prev, x: pos.x, y: pos.y }));
+                        }}
                         placeholder="Ijazah"
-                        className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-white transition"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-white transition text-xs"
                       />
                     </div>
                     <div>
@@ -1158,9 +1249,26 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                     <button
                       type="button"
                       onClick={() => handlePresetPosition('default-ijazah')}
-                      className="col-span-2 px-2.5 py-2 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-200 border border-emerald-500/50 text-[11px] font-bold text-center transition flex items-center justify-center gap-1.5 shadow"
+                      className={`px-2.5 py-2 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1.5 border shadow ${
+                        !formData.documentType?.toLowerCase().includes('transkrip')
+                          ? 'bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-200 border-emerald-500/60 ring-1 ring-emerald-500/30'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                      }`}
+                      title="Posisi barcode standar Ijazah: X: 346, Y: 622"
                     >
-                      <span>Posisi Default Ijazah</span>
+                      <span>Default Ijazah (346, 622)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePresetPosition('default-transkrip')}
+                      className={`px-2.5 py-2 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1.5 border shadow ${
+                        formData.documentType?.toLowerCase().includes('transkrip')
+                          ? 'bg-cyan-600/30 hover:bg-cyan-600/40 text-cyan-200 border-cyan-500/60 ring-1 ring-cyan-500/30'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                      }`}
+                      title="Posisi barcode standar Transkrip: X: 344, Y: 662"
+                    >
+                      <span>Default Transkrip (344, 662)</span>
                     </button>
                     <button
                       type="button"

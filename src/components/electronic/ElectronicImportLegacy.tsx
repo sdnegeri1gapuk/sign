@@ -90,6 +90,23 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
   const [copiedRedirect, setCopiedRedirect] = useState<boolean>(false);
 
+  // Upload Progress State
+  const [uploadProgress, setUploadProgress] = useState<{
+    isUploading: boolean;
+    percent: number;
+    stage: string;
+    fileName: string;
+    fileSizeStr: string;
+    isComplete: boolean;
+  }>({
+    isUploading: false,
+    percent: 0,
+    stage: '',
+    fileName: '',
+    fileSizeStr: '',
+    isComplete: false
+  });
+
   // Auto-sync settings when modified in settings tab
   useEffect(() => {
     const onSettingsChange = () => {
@@ -168,7 +185,7 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
     }
   };
 
-  // Handle PDF file upload with automatic Ijazah / Transkrip field extraction
+  // Handle PDF file upload with automatic Ijazah / Transkrip field extraction and progress tracking
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -178,12 +195,39 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
       return;
     }
 
+    const sizeStr = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+    setUploadProgress({
+      isUploading: true,
+      percent: 10,
+      stage: `Membaca berkas PDF (${sizeStr})...`,
+      fileName: file.name,
+      fileSizeStr: sizeStr,
+      isComplete: false
+    });
+
     const reader = new FileReader();
+    reader.onprogress = (ev) => {
+      if (ev.lengthComputable && ev.total > 0) {
+        const percent = Math.min(50, Math.round((ev.loaded / ev.total) * 50));
+        setUploadProgress((prev) => ({
+          ...prev,
+          percent: Math.max(prev.percent, percent),
+          stage: `Mengunggah berkas (${((ev.loaded / (1024 * 1024))).toFixed(1)} MB)...`
+        }));
+      }
+    };
+
     reader.onload = async (ev) => {
       const bytes = new Uint8Array(ev.target?.result as ArrayBuffer);
+      setUploadProgress((prev) => ({
+        ...prev,
+        percent: 65,
+        stage: 'Mengekstrak data ijazah & barcode lama...'
+      }));
+
       setPdfBytes(bytes);
       setFileName(file.name);
-      setFileSizeStr((file.size / (1024 * 1024)).toFixed(2) + ' MB');
+      setFileSizeStr(sizeStr);
 
       const settings = getAppSettings();
 
@@ -208,8 +252,24 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
         description: `${extracted.documentType} kelulusan siswa an. ${extracted.studentName} dengan barcode fisik eksisting.`
       }));
 
+      setUploadProgress((prev) => ({
+        ...prev,
+        percent: 100,
+        stage: 'Selesai! Berkas siap didaftarkan.',
+        isComplete: true
+      }));
+
+      await new Promise((res) => setTimeout(res, 500));
+
       setStep('form_and_preview');
+      setUploadProgress((prev) => ({ ...prev, isUploading: false }));
     };
+
+    reader.onerror = () => {
+      alert('Gagal membaca berkas PDF');
+      setUploadProgress((prev) => ({ ...prev, isUploading: false }));
+    };
+
     reader.readAsArrayBuffer(file);
   };
 
@@ -448,26 +508,68 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
       {/* STEP 1: UPLOAD DOKUMEN IJAZAH LAMA */}
       {step === 'upload' && (
         <div className="max-w-3xl mx-auto space-y-6">
-          <div className="border-2 border-dashed border-slate-700 hover:border-purple-500 rounded-3xl p-10 text-center transition bg-slate-900/40 relative group flex flex-col items-center justify-center cursor-pointer shadow-xl">
+          <div
+            className={`border-2 border-dashed rounded-3xl p-10 text-center transition bg-slate-900/40 relative group flex flex-col items-center justify-center shadow-xl ${
+              uploadProgress.isUploading
+                ? 'border-purple-500 bg-purple-950/20 cursor-wait'
+                : 'border-slate-700 hover:border-purple-500 cursor-pointer'
+            }`}
+          >
             <input
               type="file"
               accept=".pdf,application/pdf"
+              disabled={uploadProgress.isUploading}
               onChange={handleFileUpload}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
             />
-            <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center mb-4 group-hover:scale-105 transition shadow-lg">
-              <Upload className="w-8 h-8" />
-            </div>
-            <h3 className="text-base font-bold text-white">
-              Pilih atau Seret Berkas PDF Ijazah Lama
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Format: PDF (Maks. 25 MB). Dokumen tidak akan diubah atau dicap barcode baru.
-            </p>
-            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-xs text-slate-300 border border-slate-700">
-              <ShieldCheck className="w-4 h-4 text-purple-400" />
-              <span>Mempertahankan Barcode Asli yang Sudah Dicetak</span>
-            </div>
+            {uploadProgress.isUploading ? (
+              <div className="flex flex-col items-center gap-3 py-2 max-w-md w-full mx-auto">
+                <div className="w-14 h-14 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center shadow-inner animate-pulse">
+                  <Upload className="w-7 h-7 animate-bounce" />
+                </div>
+                <div className="w-full space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <span className="text-white flex items-center gap-1.5">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                      Sedang Memproses Ijazah Lama...
+                    </span>
+                    <span className="font-mono text-purple-400 font-bold text-sm">
+                      {uploadProgress.percent}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-950 rounded-full h-3 p-0.5 border border-slate-800 overflow-hidden shadow-inner">
+                    <div
+                      className="h-full bg-gradient-to-r from-purple-500 via-indigo-400 to-purple-400 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.max(5, uploadProgress.percent)}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span className="truncate max-w-[260px]">
+                      {uploadProgress.stage}
+                    </span>
+                    <span className="shrink-0 font-mono text-slate-300">
+                      {uploadProgress.fileSizeStr}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center mb-4 group-hover:scale-105 transition shadow-lg">
+                  <Upload className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-white">
+                  Pilih atau Seret Berkas PDF Ijazah Lama
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Format: PDF (Maks. 25 MB). Dokumen tidak akan diubah atau dicap barcode baru.
+                </p>
+                <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-xs text-slate-300 border border-slate-700">
+                  <ShieldCheck className="w-4 h-4 text-purple-400" />
+                  <span>Mempertahankan Barcode Asli yang Sudah Dicetak</span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Quick Sample Option: Both IJZ- and TRN- */}
@@ -1008,6 +1110,95 @@ export const ElectronicImportLegacy: React.FC<ElectronicImportLegacyProps> = ({
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL OVERLAY: INDIKATOR PROGRES UPLOAD IJAZAH LAMA */}
+      {uploadProgress.isUploading && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-purple-500/40 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl shadow-purple-950/50 space-y-5 text-center relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Top glowing bar */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-indigo-400 to-purple-500" />
+
+            {/* Icon */}
+            <div className="relative mx-auto w-16 h-16 flex items-center justify-center">
+              <div className="absolute inset-0 rounded-2xl bg-purple-500/20 animate-ping opacity-30" />
+              <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-purple-500/25">
+                {uploadProgress.isComplete ? (
+                  <CheckCircle2 className="w-8 h-8 text-white animate-bounce" />
+                ) : (
+                  <Upload className="w-8 h-8 text-white animate-pulse" />
+                )}
+              </div>
+            </div>
+
+            {/* Title & Info */}
+            <div className="space-y-1">
+              <h3 className="text-base sm:text-lg font-bold text-white">
+                {uploadProgress.isComplete
+                  ? 'Upload Berhasil!'
+                  : 'Sedang Mengunggah & Memproses Ijazah Lama'}
+              </h3>
+              <p className="text-xs text-slate-400">
+                {uploadProgress.isComplete
+                  ? 'Berkas telah siap dan sedang dialihkan ke formulir...'
+                  : 'Mengekstrak data ijazah & mendeteksi barcode lama'}
+              </p>
+            </div>
+
+            {/* Big Percent Badge */}
+            <div className="py-1">
+              <div className="inline-flex items-baseline gap-1.5 px-5 py-2 rounded-2xl bg-purple-950/70 border border-purple-500/30 shadow-inner">
+                <span className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-300 font-mono tracking-tight">
+                  {uploadProgress.percent}%
+                </span>
+                <span className="text-xs text-purple-400 font-bold uppercase tracking-wider">
+                  {uploadProgress.isComplete ? 'Selesai' : 'Terunggah'}
+                </span>
+              </div>
+            </div>
+
+            {/* Glowing Animated Progress Bar */}
+            <div className="space-y-2">
+              <div className="w-full bg-slate-950 rounded-full h-3.5 p-0.5 border border-slate-800 shadow-inner overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-500 via-indigo-400 to-purple-400 rounded-full transition-all duration-300 relative shadow-md shadow-purple-500/50"
+                  style={{ width: `${Math.max(4, uploadProgress.percent)}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono px-1">
+                <span className="truncate max-w-[200px]">
+                  {uploadProgress.fileSizeStr || 'Dokumen PDF'}
+                </span>
+                <span className="text-purple-400 font-bold">
+                  {uploadProgress.percent}%
+                </span>
+              </div>
+            </div>
+
+            {/* Current File and Action Box */}
+            <div className="bg-slate-950/80 rounded-2xl p-3.5 border border-slate-800/80 text-left space-y-1.5">
+              <div className="flex items-center gap-2 overflow-hidden text-xs text-slate-300">
+                <FileText className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span className="truncate font-mono font-medium" title={uploadProgress.fileName}>
+                  {uploadProgress.fileName || 'Memproses ijazah...'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                <RefreshCw
+                  className={`w-3 h-3 text-purple-400 shrink-0 ${
+                    uploadProgress.isComplete ? '' : 'animate-spin'
+                  }`}
+                />
+                <span className="truncate text-slate-300">
+                  {uploadProgress.stage}
+                </span>
+              </div>
             </div>
           </div>
         </div>
