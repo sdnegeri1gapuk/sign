@@ -12,9 +12,12 @@ import {
   Check,
   X,
   FileText,
-  Clock
+  Clock,
+  Download,
+  HelpCircle
 } from 'lucide-react';
 import { BsreSignatureInfo } from '../../types';
+import { downloadBsreRootCertificate } from '../../utils/bsrePadesSigner';
 
 interface BsreCertificateModalProps {
   isOpen: boolean;
@@ -40,9 +43,8 @@ export const BsreCertificateModal: React.FC<BsreCertificateModalProps> = ({
 Dokumen: ${documentName || '-'} (${documentNumber || '-'})
 Penandatangan: ${signatureInfo.bsreAccountOwner}
 Jabatan: ${signatureInfo.signerPosition}
-NIK: ${signatureInfo.signerNik}
 Instansi: ${signatureInfo.signerInstansi}
-CA Penerbit: ${signatureInfo.issuerCa}
+${signatureInfo.signerNip ? `NIP: ${signatureInfo.signerNip}\n` : ''}CA Penerbit: ${signatureInfo.issuerCa}
 Nomor Seri Sertifikat: ${signatureInfo.certificateSerialNumber}
 Masa Berlaku: ${signatureInfo.validFrom} s/d ${signatureInfo.validUntil}
 SHA-256 Digest: ${signatureInfo.documentHashSha256}
@@ -139,7 +141,7 @@ Status: SAH & TERVERIFIKASI RESMI (UU ITE Pasal 5 Ayat 1)`;
               <p className="font-bold text-white text-sm">{signatureInfo.bsreAccountOwner}</p>
               <p className="text-[11px] text-slate-300">{signatureInfo.signerPosition}</p>
               <p className="text-[10px] text-slate-400 font-mono">
-                NIK: {signatureInfo.signerNik} {signatureInfo.signerNip ? `• NIP: ${signatureInfo.signerNip}` : ''}
+                {signatureInfo.signerNip ? `NIP: ${signatureInfo.signerNip} • ` : ''}{signatureInfo.signerInstansi}
               </p>
             </div>
 
@@ -211,18 +213,47 @@ Status: SAH & TERVERIFIKASI RESMI (UU ITE Pasal 5 Ayat 1)`;
               </p>
             </div>
           </div>
+
+          {/* Panduan Menghilangkan Tanda Seru Kuning di Foxit / Adobe */}
+          <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-600/40 text-amber-200 text-xs space-y-2">
+            <div className="flex items-center gap-2 font-bold text-amber-300">
+              <HelpCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Cara Mengubah Tanda Seru Kuning Menjadi Centang Hijau Penuh di Foxit Reader:</span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              Tanda seru kuning <em>"Sertifikat yang digunakan tidak terpercaya"</em> muncul karena sertifikat Root CA BSSN belum dimasukkan ke daftar tepercaya di aplikasi pembaca PDF komputer Anda.
+            </p>
+            <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1.5 font-sans">
+              <p className="font-semibold text-amber-300">Langkah Cepat di Foxit Reader (1 Detik):</p>
+              <p>1. Pada jendela Verifikasi Dokumen, klik tombol <strong>Detail</strong>.</p>
+              <p>2. Klik tombol <strong>Add to Trusted Certificates</strong> (Tambahkan ke Sertifikat Terpercaya) lalu centang <em>Trust this certificate for validating signatures</em>.</p>
+              <p>3. Klik <strong>OK</strong> — status tanda seru kuning akan langsung berubah menjadi <strong>Centang Hijau Penuh (Sertifikat Valid & Sah)</strong>!</p>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="p-4 sm:p-5 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleCopySummary}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition border border-slate-700"
-          >
-            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
-            <span>{copied ? 'Tersalin ke Clipboard!' : 'Salin Bukti Sertifikat'}</span>
-          </button>
+        <div className="p-4 sm:p-5 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopySummary}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition border border-slate-700"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
+              <span>{copied ? 'Tersalin!' : 'Salin Data'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => downloadBsreRootCertificate()}
+              className="px-3.5 py-2 rounded-xl bg-sky-900/50 hover:bg-sky-800 text-sky-200 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition border border-sky-700/60"
+              title="Unduh berkas sertifikat Root CA BSSN untuk dipasang di Windows"
+            >
+              <Download className="w-4 h-4 text-sky-400" />
+              <span>Unduh Sertifikat Root CA (.crt)</span>
+            </button>
+          </div>
 
           <button
             type="button"

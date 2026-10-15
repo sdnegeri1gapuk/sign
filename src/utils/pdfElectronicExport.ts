@@ -157,7 +157,7 @@ export async function exportOriginalWithQrCode(
       pdfDoc.setProducer('Balai Sertifikasi Elektronik (BSrE) - Badan Siber dan Sandi Negara (BSSN)');
       pdfDoc.setAuthor(bsreSignature.bsreAccountOwner);
       pdfDoc.setSubject(
-        `Ditandatangani secara elektronik oleh ${bsreSignature.bsreAccountOwner} (NIK: ${bsreSignature.signerNik}) via BSrE BSSN. Sertifikat SN: ${bsreSignature.certificateSerialNumber}`
+        `Ditandatangani secara elektronik oleh ${bsreSignature.bsreAccountOwner} (${bsreSignature.signerPosition}) via BSrE BSSN. Sertifikat SN: ${bsreSignature.certificateSerialNumber}`
       );
       pdfDoc.setKeywords([
         'BSrE',

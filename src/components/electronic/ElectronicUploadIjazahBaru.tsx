@@ -1578,9 +1578,11 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                         </div>
                         <p className="font-bold text-white text-xs mt-0.5">{bsreAccount.namaLengkap}</p>
                         <p className="text-[11px] text-slate-300">{bsreAccount.jabatan} • {bsreAccount.instansi}</p>
-                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                          NIK: {bsreAccount.nik} {bsreAccount.nip ? `| NIP: ${bsreAccount.nip}` : ''}
-                        </p>
+                        {bsreAccount.nip && (
+                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                            NIP: {bsreAccount.nip}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -1860,7 +1862,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                       <strong>Penandatangan:</strong> {savedDoc.bsreSignature.bsreAccountOwner} ({savedDoc.bsreSignature.signerPosition})
                     </p>
                     <p className="font-mono text-slate-400 text-[10px]">
-                      NIK: {savedDoc.bsreSignature.signerNik} • SN: {savedDoc.bsreSignature.certificateSerialNumber}
+                      {savedDoc.bsreSignature.signerNip ? `NIP: ${savedDoc.bsreSignature.signerNip} • ` : ''}SN: {savedDoc.bsreSignature.certificateSerialNumber}
                     </p>
                   </div>
                   <button

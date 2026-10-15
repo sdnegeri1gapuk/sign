@@ -148,8 +148,8 @@ export async function calculateSha256(data: Uint8Array | string): Promise<string
     bytes = data;
   }
 
-  // Gunakan Web Crypto API
-  if (window.crypto && window.crypto.subtle) {
+  // Gunakan Web Crypto API jika di browser
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
     const hashBuffer = await window.crypto.subtle.digest('SHA-256', bytes as ArrayBufferView<ArrayBuffer>);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -327,7 +327,7 @@ export async function generateBsreVisualBadge(
     ctx.fillStyle = '#334155';
     ctx.font = '17px system-ui, -apple-system, sans-serif';
     ctx.fillText(
-      `${account.jabatan} • NIK: ${account.nik.substring(0, 6)}******${account.nik.substring(12)}`,
+      account.nip ? `${account.jabatan} • NIP: ${account.nip}` : `${account.jabatan} • ${account.instansi}`,
       106,
       95
     );
