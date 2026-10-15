@@ -830,8 +830,8 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
       setExportProgressPercent(100);
       setExportProgressText('Selesai! Menyiapkan unduhan...');
 
-      // Create download blob
-      const blob = new Blob([stampedPdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+      // Create download blob directly from Uint8Array
+      const blob = new Blob([stampedPdfBytes as any], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       setDownloadBlobUrl(url);
 

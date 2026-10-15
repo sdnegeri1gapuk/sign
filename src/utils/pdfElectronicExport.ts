@@ -1,6 +1,8 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { pdfjsLib } from './pdfWorker';
 import { QrPlacementSettings, BsreSignatureInfo } from '../types';
+import { signPdfWithBsrePades } from './bsrePadesSigner';
+import { getActiveBsreAccount } from './bsreService';
 
 export interface ExportElectronicProgressCallback {
   (stepText: string, percent: number): void;
@@ -172,8 +174,42 @@ export async function exportOriginalWithQrCode(
 
   onProgress?.('Menyelesaikan berkas PDF final terverifikasi...', 90);
   const finalBytes = await pdfDoc.save();
-  onProgress?.('✓ PDF verifikasi elektronik berhasil dibuat', 100);
 
+  // Jika ditandatangani resmi BSrE: sematkan Tanda Tangan Kriptografis PAdES/PKCS#7 standar ISO 32000-1
+  if (bsreSignature && bsreSignature.isSignedWithBsre) {
+    onProgress?.('Membubuhkan TTE Kriptografis ISO 32000-1 PAdES/PKCS#7 Resmi BSrE BSSN...', 95);
+    const activeAcc = getActiveBsreAccount();
+    const fallbackAcc = {
+      id: 'bsre_active',
+      nik: bsreSignature.signerNik,
+      namaLengkap: bsreSignature.bsreAccountOwner,
+      nip: bsreSignature.signerNip,
+      jabatan: bsreSignature.signerPosition,
+      instansi: bsreSignature.signerInstansi,
+      email: `${bsreSignature.signerNik}@bsre.bssn.go.id`,
+      nomorSeriSertifikat: bsreSignature.certificateSerialNumber,
+      masaBerlakuDari: bsreSignature.validFrom,
+      masaBerlakuSampai: bsreSignature.validUntil,
+      penerbitCa: bsreSignature.issuerCa,
+      rootCa: 'Otoritas Sertifikasi Digital Republik Indonesia (Root CA)',
+      statusSertifikat: 'AKTIF' as const,
+      tipeKoneksi: 'api_besign' as const,
+      isLoggedIn: true
+    };
+    try {
+      const padesSignedBytes = await signPdfWithBsrePades(
+        finalBytes,
+        bsreSignature,
+        activeAcc || fallbackAcc
+      );
+      onProgress?.('✓ Tanda tangan digital resmi BSrE BSSN berhasil dibubuhkan', 100);
+      return padesSignedBytes;
+    } catch (signErr) {
+      console.warn('Gagal membubuhkan tanda tangan PAdES digital:', signErr);
+    }
+  }
+
+  onProgress?.('✓ PDF verifikasi elektronik berhasil dibuat', 100);
   return finalBytes;
 }
 
@@ -285,10 +321,44 @@ export async function exportFlattenedWithQrCode(
     });
   }
 
-  onProgress?.('Menyusun PDF final...', 95);
+  onProgress?.('Menyusun PDF final...', 90);
   const finalBytes = await newPdfDoc.save();
-  onProgress?.('✓ PDF Gambar / Flattened terverifikasi selesai', 100);
 
+  // Jika ditandatangani resmi BSrE: sematkan TTE Kriptografis PAdES/PKCS#7 resmi
+  if (bsreSignature && bsreSignature.isSignedWithBsre) {
+    onProgress?.('Membubuhkan TTE Kriptografis ISO 32000-1 PAdES/PKCS#7 Resmi BSrE BSSN...', 95);
+    const activeAcc = getActiveBsreAccount();
+    const fallbackAcc = {
+      id: 'bsre_active',
+      nik: bsreSignature.signerNik,
+      namaLengkap: bsreSignature.bsreAccountOwner,
+      nip: bsreSignature.signerNip,
+      jabatan: bsreSignature.signerPosition,
+      instansi: bsreSignature.signerInstansi,
+      email: `${bsreSignature.signerNik}@bsre.bssn.go.id`,
+      nomorSeriSertifikat: bsreSignature.certificateSerialNumber,
+      masaBerlakuDari: bsreSignature.validFrom,
+      masaBerlakuSampai: bsreSignature.validUntil,
+      penerbitCa: bsreSignature.issuerCa,
+      rootCa: 'Otoritas Sertifikasi Digital Republik Indonesia (Root CA)',
+      statusSertifikat: 'AKTIF' as const,
+      tipeKoneksi: 'api_besign' as const,
+      isLoggedIn: true
+    };
+    try {
+      const padesSignedBytes = await signPdfWithBsrePades(
+        finalBytes,
+        bsreSignature,
+        activeAcc || fallbackAcc
+      );
+      onProgress?.('✓ Tanda tangan digital resmi BSrE BSSN berhasil dibubuhkan', 100);
+      return padesSignedBytes;
+    } catch (signErr) {
+      console.warn('Gagal membubuhkan tanda tangan PAdES digital pada Flattened PDF:', signErr);
+    }
+  }
+
+  onProgress?.('✓ PDF Gambar / Flattened terverifikasi selesai', 100);
   return finalBytes;
 }
 
