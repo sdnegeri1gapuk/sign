@@ -1,6 +1,6 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { pdfjsLib } from './pdfWorker';
-import { QrPlacementSettings } from '../types';
+import { QrPlacementSettings, BsreSignatureInfo } from '../types';
 
 export interface ExportElectronicProgressCallback {
   (stepText: string, percent: number): void;
@@ -27,7 +27,8 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
 export async function createCompositeQrImage(
   qrDataUrl: string,
   showLabel: boolean,
-  labelText = 'Scan untuk verifikasi dokumen'
+  labelText = 'Scan untuk verifikasi dokumen',
+  bsreSignature?: BsreSignatureInfo
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -60,9 +61,15 @@ export async function createCompositeQrImage(
         ctx.fillText(labelText, qrSize / 2, qrSize + 32);
 
         // Subtext indication
-        ctx.fillStyle = '#64748b';
-        ctx.font = '500 18px system-ui, -apple-system, sans-serif';
-        ctx.fillText('Dokumen Terverifikasi Resmi', qrSize / 2, qrSize + 60);
+        if (bsreSignature && bsreSignature.isSignedWithBsre) {
+          ctx.fillStyle = '#0369a1';
+          ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
+          ctx.fillText('🛡️ Ditandatangani Resmi BSrE - BSSN', qrSize / 2, qrSize + 60);
+        } else {
+          ctx.fillStyle = '#64748b';
+          ctx.font = '500 18px system-ui, -apple-system, sans-serif';
+          ctx.fillText('Dokumen Terverifikasi Resmi', qrSize / 2, qrSize + 60);
+        }
       }
 
       resolve(canvas.toDataURL('image/png'));
@@ -73,7 +80,7 @@ export async function createCompositeQrImage(
 }
 
 /**
- * MODE 1: PDF Asli + QR Code Verifikasi
+ * MODE 1: PDF Asli + QR Code Verifikasi (+ TTE Resmi BSrE BSSN jika aktif)
  * Preserves the original PDF structure, vector paths, and selectable text layers.
  * Embeds the QR Code object directly into the target page.
  */
@@ -81,7 +88,8 @@ export async function exportOriginalWithQrCode(
   originalPdfBytes: Uint8Array,
   qrDataUrl: string,
   settings: QrPlacementSettings,
-  onProgress?: ExportElectronicProgressCallback
+  onProgress?: ExportElectronicProgressCallback,
+  bsreSignature?: BsreSignatureInfo
 ): Promise<Uint8Array> {
   onProgress?.('Mempersiapkan dokumen PDF asli...', 15);
   const pdfDoc = await PDFDocument.load(originalPdfBytes);
@@ -93,13 +101,14 @@ export async function exportOriginalWithQrCode(
   }
 
   const targetPage = pages[targetPageIndex];
-  const { height: pageHeight } = targetPage.getSize();
+  const { width: pageWidth, height: pageHeight } = targetPage.getSize();
 
   onProgress?.('Membuat grafis QR Code verifikasi...', 40);
   const compositeDataUrl = await createCompositeQrImage(
     qrDataUrl,
     settings.showLabel,
-    settings.labelText
+    settings.labelText,
+    bsreSignature
   );
 
   const qrImageBytes = dataUrlToBytes(compositeDataUrl);
@@ -122,6 +131,45 @@ export async function exportOriginalWithQrCode(
     height: qrRenderHeight
   });
 
+  // Jika ditandatangani resmi BSrE: sematkan metadata dan catatan kaki resmi sesuai standar UU ITE & BSSN
+  if (bsreSignature && bsreSignature.isSignedWithBsre) {
+    onProgress?.('Membubuhkan segel digital & tanda tangan resmi BSrE BSSN...', 85);
+
+    try {
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontItalic = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+
+      const disclaimerText =
+        'Dokumen ini telah ditandatangani secara elektronik menggunakan sertifikat elektronik yang diterbitkan oleh Balai Sertifikasi Elektronik (BSrE), BSSN.';
+
+      // Tulis catatan kaki resmi di bagian bawah halaman
+      targetPage.drawText(disclaimerText, {
+        x: 36,
+        y: 20,
+        size: 7,
+        font: fontItalic,
+        color: rgb(0.2, 0.25, 0.35)
+      });
+
+      // Metadata resmi dokumen
+      pdfDoc.setProducer('Balai Sertifikasi Elektronik (BSrE) - Badan Siber dan Sandi Negara (BSSN)');
+      pdfDoc.setAuthor(bsreSignature.bsreAccountOwner);
+      pdfDoc.setSubject(
+        `Ditandatangani secara elektronik oleh ${bsreSignature.bsreAccountOwner} (NIK: ${bsreSignature.signerNik}) via BSrE BSSN. Sertifikat SN: ${bsreSignature.certificateSerialNumber}`
+      );
+      pdfDoc.setKeywords([
+        'BSrE',
+        'BSSN',
+        'Tanda Tangan Elektronik Resmi',
+        'UU ITE Pasal 5',
+        'Ijazah Sah',
+        bsreSignature.certificateSerialNumber
+      ]);
+    } catch (metaErr) {
+      console.warn('Could not embed BSrE font/metadata in PDF:', metaErr);
+    }
+  }
+
   onProgress?.('Menyelesaikan berkas PDF final terverifikasi...', 90);
   const finalBytes = await pdfDoc.save();
   onProgress?.('✓ PDF verifikasi elektronik berhasil dibuat', 100);
@@ -138,7 +186,8 @@ export async function exportFlattenedWithQrCode(
   originalPdfBytes: Uint8Array,
   qrDataUrl: string,
   settings: QrPlacementSettings,
-  onProgress?: ExportElectronicProgressCallback
+  onProgress?: ExportElectronicProgressCallback,
+  bsreSignature?: BsreSignatureInfo
 ): Promise<Uint8Array> {
   onProgress?.('Memuat dokumen untuk perenderan resolusi tinggi...', 10);
 
@@ -155,7 +204,8 @@ export async function exportFlattenedWithQrCode(
   const compositeDataUrl = await createCompositeQrImage(
     qrDataUrl,
     settings.showLabel,
-    settings.labelText
+    settings.labelText,
+    bsreSignature
   );
   const qrImageElement = await new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
@@ -205,6 +255,19 @@ export async function exportFlattenedWithQrCode(
 
       ctx.save();
       ctx.drawImage(qrImageElement, qrCanvasX, qrCanvasY, qrCanvasWidth, qrCanvasHeight);
+
+      // Jika BSrE aktif, gambarkan catatan kaki resmi di bagian bawah canvas
+      if (bsreSignature && bsreSignature.isSignedWithBsre) {
+        ctx.fillStyle = '#334155';
+        ctx.font = `italic ${Math.round(28)}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.fillText(
+          'Dokumen ini telah ditandatangani secara elektronik menggunakan sertifikat elektronik yang diterbitkan oleh Balai Sertifikasi Elektronik (BSrE), BSSN.',
+          40 * (scaleFactor / 4.166),
+          canvas.height - 35 * (scaleFactor / 4.166)
+        );
+      }
+
       ctx.restore();
     }
 

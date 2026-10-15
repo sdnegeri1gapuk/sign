@@ -52,12 +52,24 @@ export function generateVerificationUrl(token: string): string {
   return `${origin}${pathname}/#/verifikasi/${token}`;
 }
 
+import { getAppSettings, QrLogoType } from './appSettings';
+import { embedCenterLogoInQr, getLogoDataUrl } from './qrLogoHelper';
+
+export interface QrLogoOptions {
+  enabled?: boolean;
+  logoType?: QrLogoType;
+  customLogoDataUrl?: string;
+}
+
 /**
  * Generates a high-resolution, high-contrast QR Code with Error Correction Level 'H'
- * and safe quiet-zone border.
+ * and safe quiet-zone border, optionally embedding an institutional emblem or custom logo in the center.
  */
-export async function generateQrCodeDataUrl(url: string): Promise<string> {
-  return await QRCode.toDataURL(url, {
+export async function generateQrCodeDataUrl(
+  url: string,
+  logoOptions?: QrLogoOptions
+): Promise<string> {
+  const baseQr = await QRCode.toDataURL(url, {
     errorCorrectionLevel: 'H',
     margin: 2,
     width: 600,
@@ -66,6 +78,24 @@ export async function generateQrCodeDataUrl(url: string): Promise<string> {
       light: '#ffffff'
     }
   });
+
+  try {
+    const settings = getAppSettings();
+    const isLogoEnabled = logoOptions?.enabled !== undefined ? logoOptions.enabled : settings.qrLogoEnabled;
+
+    if (!isLogoEnabled) {
+      return baseQr;
+    }
+
+    const logoType = logoOptions?.logoType || settings.qrLogoType;
+    const customUrl = logoOptions?.customLogoDataUrl !== undefined ? logoOptions.customLogoDataUrl : settings.qrCustomLogoDataUrl;
+    const logoDataUrl = getLogoDataUrl(logoType, customUrl);
+
+    return await embedCenterLogoInQr(baseQr, logoDataUrl);
+  } catch (err) {
+    console.warn('Could not embed center logo on QR code, returning standard QR code', err);
+    return baseQr;
+  }
 }
 
 // -------------------------------------------------------------

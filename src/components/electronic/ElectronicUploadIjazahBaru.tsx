@@ -37,7 +37,7 @@ import {
   generateVerificationUrl,
   generateQrCodeDataUrl
 } from '../../utils/electronicService';
-import { getAppSettings } from '../../utils/appSettings';
+import { getAppSettings, saveAppSettings, QrLogoType } from '../../utils/appSettings';
 import {
   generateSampleIjazahPdf,
   generateSampleTranskripPdf
@@ -49,6 +49,15 @@ import {
   exportFlattenedWithQrCode
 } from '../../utils/pdfElectronicExport';
 import { ElectronicBatchSigningIjazah } from './ElectronicBatchSigningIjazah';
+import { BsreLoginModal } from './BsreLoginModal';
+import { BsreCertificateModal } from './BsreCertificateModal';
+import {
+  getActiveBsreAccount,
+  isBsreAutoSignEnabled,
+  setBsreAutoSignEnabled,
+  signDocumentWithBsre,
+  BsreAccount
+} from '../../utils/bsreService';
 
 /**
  * Posisi default barcode:
@@ -158,6 +167,50 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [isQrGenerated, setIsQrGenerated] = useState<boolean>(false);
   const [isPreviewFinal, setIsPreviewFinal] = useState<boolean>(false);
+
+  // Logo di tengah barcode state
+  const initialSettings = getAppSettings();
+  const [qrLogoEnabled, setQrLogoEnabled] = useState<boolean>(initialSettings.qrLogoEnabled);
+  const [qrLogoType, setQrLogoType] = useState<QrLogoType>(initialSettings.qrLogoType);
+
+  // Akun Resmi BSrE BSSN & Penandatanganan Digital
+  const [bsreAccount, setBsreAccount] = useState<BsreAccount | null>(getActiveBsreAccount());
+  const [isBsreSignEnabled, setIsBsreSignEnabled] = useState<boolean>(isBsreAutoSignEnabled());
+  const [isBsreLoginModalOpen, setIsBsreLoginModalOpen] = useState<boolean>(false);
+  const [isBsreCertModalOpen, setIsBsreCertModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBsreChange = (e: any) => {
+      setBsreAccount(e.detail || null);
+    };
+    window.addEventListener('bsre_account_changed', handleBsreChange);
+    return () => window.removeEventListener('bsre_account_changed', handleBsreChange);
+  }, []);
+
+  const handleToggleLogo = async (enabled: boolean) => {
+    setQrLogoEnabled(enabled);
+    saveAppSettings({ qrLogoEnabled: enabled });
+    if (verificationUrl) {
+      const updated = await generateQrCodeDataUrl(verificationUrl, {
+        enabled,
+        logoType: qrLogoType
+      });
+      setQrDataUrl(updated);
+    }
+  };
+
+  const handleChangeLogoType = async (type: QrLogoType) => {
+    setQrLogoType(type);
+    setQrLogoEnabled(true);
+    saveAppSettings({ qrLogoType: type, qrLogoEnabled: true });
+    if (verificationUrl) {
+      const updated = await generateQrCodeDataUrl(verificationUrl, {
+        enabled: true,
+        logoType: type
+      });
+      setQrDataUrl(updated);
+    }
+  };
 
   // Interactive Drag & Resize State on PDF Canvas
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -687,7 +740,25 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
         finalQrData = await generateQrCodeDataUrl(finalVerificationUrl);
       }
 
-      setExportProgressPercent(45);
+      // Penandatanganan Resmi BSrE BSSN (jika diaktifkan dan akun terhubung)
+      let bsreSignature: any = undefined;
+      if (isBsreSignEnabled && bsreAccount && bsreAccount.isLoggedIn) {
+        setExportProgressPercent(35);
+        setExportProgressText(
+          `Menandatangani berkas ijazah secara sah dengan akun BSrE (${bsreAccount.namaLengkap})...`
+        );
+        bsreSignature = await signDocumentWithBsre(
+          pdfBytes,
+          {
+            documentName: formData.documentName.trim() || `Ijazah - ${studentNameExtracted || 'Siswa'}`,
+            documentNumber: formData.documentNumber.trim() || '111202663419179',
+            issuer: formData.issuer.trim()
+          },
+          bsreAccount
+        );
+      }
+
+      setExportProgressPercent(50);
       setExportProgressText(
         exportMode === 'flattened'
           ? 'Merender Flat PDF 300 DPI solid (Anti-Copy & Terkunci)...'
@@ -702,11 +773,21 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
           qrSettings,
           (msg, percent) => {
             setExportProgressText(msg);
-            setExportProgressPercent(45 + Math.round(percent * 0.45));
-          }
+            setExportProgressPercent(50 + Math.round(percent * 0.4));
+          },
+          bsreSignature
         );
       } else {
-        stampedPdfBytes = await exportOriginalWithQrCode(pdfBytes, finalQrData, qrSettings);
+        stampedPdfBytes = await exportOriginalWithQrCode(
+          pdfBytes,
+          finalQrData,
+          qrSettings,
+          (msg, percent) => {
+            setExportProgressText(msg);
+            setExportProgressPercent(50 + Math.round(percent * 0.4));
+          },
+          bsreSignature
+        );
       }
 
       setExportProgressPercent(92);
@@ -740,7 +821,8 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
         allowView: true,
         allowDownload: true,
         qrDataUrl: finalQrData,
-        verificationUrl: finalVerificationUrl
+        verificationUrl: finalVerificationUrl,
+        bsreSignature: bsreSignature
       };
 
       await saveVerifiedDocument(newVerifiedDoc);
@@ -1367,6 +1449,83 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                   )}
                 </div>
 
+                {/* Logo di Tengah Barcode Controls */}
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-300 font-medium">Logo di Tengah Barcode</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20">
+                        Scan Level H
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={qrLogoEnabled}
+                      onChange={(e) => handleToggleLogo(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {qrLogoEnabled && (
+                    <div className="space-y-1">
+                      <div className="grid grid-cols-3 gap-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleChangeLogoType('kemdikbud')}
+                          className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center truncate ${
+                            qrLogoType === 'kemdikbud'
+                              ? 'bg-sky-600/30 border-sky-400 text-sky-200 ring-1 ring-sky-500/30'
+                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
+                          }`}
+                          title="Tut Wuri Handayani (Kemendikbud)"
+                        >
+                          🎓 Kemdikbud
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleChangeLogoType('garuda')}
+                          className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center truncate ${
+                            qrLogoType === 'garuda'
+                              ? 'bg-amber-600/30 border-amber-400 text-amber-200 ring-1 ring-amber-500/30'
+                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
+                          }`}
+                          title="Lambang Garuda Pancasila"
+                        >
+                          🦅 Garuda
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleChangeLogoType('bsre')}
+                          className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center truncate ${
+                            qrLogoType === 'bsre'
+                              ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200 ring-1 ring-emerald-500/30'
+                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
+                          }`}
+                          title="Balai Sertifikasi Elektronik / TTE"
+                        >
+                          🛡️ BSrE
+                        </button>
+                      </div>
+
+                      {initialSettings.qrCustomLogoDataUrl && (
+                        <button
+                          type="button"
+                          onClick={() => handleChangeLogoType('custom')}
+                          className={`w-full mt-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition flex items-center justify-center gap-1.5 ${
+                            qrLogoType === 'custom'
+                              ? 'bg-purple-600/30 border-purple-400 text-purple-200 ring-1 ring-purple-500/30'
+                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
+                          }`}
+                        >
+                          <span>🏫 Gunakan Logo Kustom Sekolah</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* Multi-page selector if diploma has transcript or multiple pages */}
                 {numPages > 1 && (
                   <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
@@ -1388,6 +1547,94 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                     </select>
                   </div>
                 )}
+              </div>
+
+              {/* BSrE Official Signature Card */}
+              <div className="bg-slate-900/90 border border-sky-800/50 rounded-2xl p-5 shadow-xl space-y-4 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-sky-400" />
+                    <h4 className="font-bold text-white tracking-wide">TTE RESMI BSrE (BSSN)</h4>
+                  </div>
+                  {bsreAccount && bsreAccount.isLoggedIn ? (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Terhubung
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-slate-800 text-slate-400 border border-slate-700">
+                      Belum Login
+                    </span>
+                  )}
+                </div>
+
+                {/* Account Status Box */}
+                {bsreAccount && bsreAccount.isLoggedIn ? (
+                  <div className="p-3 rounded-xl bg-sky-950/40 border border-sky-800/40 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-sky-300 font-bold uppercase">Pemilik Akun Resmi:</span>
+                        </div>
+                        <p className="font-bold text-white text-xs mt-0.5">{bsreAccount.namaLengkap}</p>
+                        <p className="text-[11px] text-slate-300">{bsreAccount.jabatan} • {bsreAccount.instansi}</p>
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                          NIK: {bsreAccount.nik} {bsreAccount.nip ? `| NIP: ${bsreAccount.nip}` : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-sky-900/50 text-[10px] text-slate-400">
+                      <span className="truncate max-w-[150px]">SN: {bsreAccount.nomorSeriSertifikat}</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsBsreLoginModalOpen(true)}
+                        className="text-sky-400 hover:text-sky-300 font-semibold underline"
+                      >
+                        Ganti / Kelola Akun
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/60 text-slate-300 space-y-2">
+                    <p className="text-[11px] leading-relaxed">
+                      Hubungkan akun penandatangan resmi BSrE untuk membubuhkan tanda tangan elektronik sah berkekuatan hukum penuh (UU ITE).
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsBsreLoginModalOpen(true)}
+                      className="w-full py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Login Pemilik Akun BSrE</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Auto Sign Toggle */}
+                <div className="pt-1 border-t border-slate-800 space-y-2">
+                  <label className="flex items-center justify-between cursor-pointer">
+                    <span className="text-slate-300 font-medium">
+                      Bubuhkan TTE Resmi BSrE:
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={isBsreSignEnabled && Boolean(bsreAccount?.isLoggedIn)}
+                      disabled={!bsreAccount?.isLoggedIn}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setIsBsreSignEnabled(val);
+                        setBsreAutoSignEnabled(val);
+                      }}
+                      className="w-4 h-4 rounded text-sky-600 bg-slate-800 border-slate-700 focus:ring-sky-500"
+                    />
+                  </label>
+                  <p className="text-[10px] text-slate-400 leading-normal">
+                    {isBsreSignEnabled && bsreAccount?.isLoggedIn
+                      ? '✓ Ijazah akan otomatis dibubuhi cap digital BSrE, hash SHA-256, dan catatan kaki legal BSSN.'
+                      : 'Aktifkan untuk menyertakan tanda tangan digital resmi BSrE pada ijazah & barcode.'}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -1595,6 +1842,38 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                   {exportMode === 'flattened' ? 'Flat PDF 300 DPI (Anti-Copy)' : 'PDF Asli + Barcode'}
                 </span>
               </div>
+
+              {/* BSrE Signature Proof in Success Summary */}
+              {savedDoc.bsreSignature && (
+                <div className="p-3.5 rounded-xl bg-sky-950/60 border border-sky-800/60 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-sky-300 font-bold">
+                      <ShieldCheck className="w-4 h-4 text-sky-400" />
+                      <span>Tertandatangani Resmi BSrE - BSSN</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold uppercase">
+                      Sah & Terverifikasi
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-300 space-y-0.5">
+                    <p>
+                      <strong>Penandatangan:</strong> {savedDoc.bsreSignature.bsreAccountOwner} ({savedDoc.bsreSignature.signerPosition})
+                    </p>
+                    <p className="font-mono text-slate-400 text-[10px]">
+                      NIK: {savedDoc.bsreSignature.signerNik} • SN: {savedDoc.bsreSignature.certificateSerialNumber}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsBsreCertModalOpen(true)}
+                    className="w-full mt-1 py-1.5 rounded-lg bg-sky-900/60 hover:bg-sky-800 text-sky-200 text-[11px] font-semibold transition border border-sky-700/60 flex items-center justify-center gap-1.5"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Lihat Bukti Sertifikat Elektronik BSrE (X.509)</span>
+                  </button>
+                </div>
+              )}
+
               <div>
                 <span className="text-slate-400 block mb-1">Link Verifikasi Resmi (Web Baru):</span>
                 <div className="flex items-center gap-2">
@@ -1862,6 +2141,27 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL LOGIN PEMILIK AKUN RESMI BSrE */}
+      <BsreLoginModal
+        isOpen={isBsreLoginModalOpen}
+        onClose={() => setIsBsreLoginModalOpen(false)}
+        onLoginSuccess={(acc) => {
+          setBsreAccount(acc);
+          setIsBsreSignEnabled(true);
+        }}
+      />
+
+      {/* MODAL SERTIFIKAT ELEKTRONIK BSrE */}
+      {savedDoc?.bsreSignature && (
+        <BsreCertificateModal
+          isOpen={isBsreCertModalOpen}
+          onClose={() => setIsBsreCertModalOpen(false)}
+          signatureInfo={savedDoc.bsreSignature}
+          documentName={savedDoc.documentName}
+          documentNumber={savedDoc.documentNumber}
+        />
       )}
     </div>
   );

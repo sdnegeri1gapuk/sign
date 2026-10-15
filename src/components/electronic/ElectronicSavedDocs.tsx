@@ -22,7 +22,8 @@ import {
   Trash2,
   Globe,
   Save,
-  Link as LinkIcon
+  Link as LinkIcon,
+  ShieldCheck
 } from 'lucide-react';
 import { VerifiedDocument, DocumentStatus } from '../../types';
 import {
@@ -30,6 +31,7 @@ import {
   updateVerifiedDocument,
   deleteVerifiedDocument
 } from '../../utils/electronicService';
+import { BsreCertificateModal } from './BsreCertificateModal';
 
 interface ElectronicSavedDocsProps {
   documents: VerifiedDocument[];
@@ -50,6 +52,7 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
 
   // Selected document for Detail Modal
   const [selectedDoc, setSelectedDoc] = useState<VerifiedDocument | null>(null);
+  const [viewingCertDoc, setViewingCertDoc] = useState<VerifiedDocument | null>(null);
 
   // Edit Modal state
   const [editingDoc, setEditingDoc] = useState<VerifiedDocument | null>(null);
@@ -278,6 +281,16 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                         {doc.isLegacyDocument && (
                           <span className="px-1.5 py-0.2 rounded text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/30 font-medium shrink-0">
                             Ijazah Lama
+                          </span>
+                        )}
+                        {doc.bsreSignature && doc.bsreSignature.isSignedWithBsre && (
+                          <span
+                            onClick={() => setViewingCertDoc(doc)}
+                            className="px-1.5 py-0.2 rounded text-[9px] bg-sky-950/80 text-sky-300 border border-sky-500/40 font-bold shrink-0 flex items-center gap-1 cursor-pointer hover:bg-sky-900 transition"
+                            title={`Ditandatangani Resmi BSrE: ${doc.bsreSignature.bsreAccountOwner}`}
+                          >
+                            <ShieldCheck className="w-2.5 h-2.5 text-sky-400" />
+                            <span>BSrE</span>
                           </span>
                         )}
                       </div>
@@ -662,6 +675,37 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
                 <span className="text-slate-400">Jumlah Verifikasi:</span>
                 <span className="text-white font-bold">{selectedDoc.verificationCount || 0}x Dipindai</span>
               </div>
+
+              {/* BSrE Signature Detail */}
+              {selectedDoc.bsreSignature && (
+                <div className="mt-2 p-3 rounded-xl bg-sky-950/60 border border-sky-800/50 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-sky-300 uppercase flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
+                      TTE Resmi BSrE - BSSN
+                    </span>
+                    <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800/50">
+                      Sah & Terdaftar
+                    </span>
+                  </div>
+                  <p className="text-white font-semibold text-[11px]">
+                    {selectedDoc.bsreSignature.bsreAccountOwner} ({selectedDoc.bsreSignature.signerPosition})
+                  </p>
+                  <p className="text-[10px] font-mono text-slate-400 truncate">
+                    SN: {selectedDoc.bsreSignature.certificateSerialNumber}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingCertDoc(selectedDoc);
+                    }}
+                    className="w-full mt-1 py-1 rounded-lg bg-sky-900/60 hover:bg-sky-800 text-sky-200 text-[10px] font-bold transition flex items-center justify-center gap-1 border border-sky-700/50"
+                  >
+                    <ShieldCheck className="w-3 h-3" />
+                    <span>Lihat Sertifikat Digital X.509</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -733,6 +777,17 @@ export const ElectronicSavedDocs: React.FC<ElectronicSavedDocsProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Sertifikat Digital BSrE */}
+      {viewingCertDoc?.bsreSignature && (
+        <BsreCertificateModal
+          isOpen={Boolean(viewingCertDoc)}
+          onClose={() => setViewingCertDoc(null)}
+          signatureInfo={viewingCertDoc.bsreSignature}
+          documentName={viewingCertDoc.documentName}
+          documentNumber={viewingCertDoc.documentNumber}
+        />
       )}
     </div>
   );

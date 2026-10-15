@@ -34,7 +34,7 @@ import {
   generateVerificationUrl,
   generateQrCodeDataUrl
 } from '../../utils/electronicService';
-import { getAppSettings } from '../../utils/appSettings';
+import { getAppSettings, saveAppSettings, QrLogoType } from '../../utils/appSettings';
 import { extractIjazahMetadata } from '../../utils/ijazahExtractor';
 import {
   exportOriginalWithQrCode,
@@ -42,6 +42,11 @@ import {
 } from '../../utils/pdfElectronicExport';
 import { generateSampleBatchIjazahPdfs } from '../../utils/samplePdf';
 import { pdfjsLib } from '../../utils/pdfWorker';
+import {
+  getActiveBsreAccount,
+  isBsreAutoSignEnabled,
+  signDocumentWithBsre
+} from '../../utils/bsreService';
 
 export interface BatchItem {
   id: string;
@@ -138,6 +143,46 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
 
   const [exportMode, setExportMode] = useState<'original' | 'flattened'>('original');
   const [showSettingsAccordion, setShowSettingsAccordion] = useState<boolean>(false);
+
+  // Logo di tengah barcode state
+  const initialBatchSettings = getAppSettings();
+  const [qrLogoEnabled, setQrLogoEnabled] = useState<boolean>(initialBatchSettings.qrLogoEnabled);
+  const [qrLogoType, setQrLogoType] = useState<QrLogoType>(initialBatchSettings.qrLogoType);
+
+  const handleToggleLogo = async (enabled: boolean) => {
+    setQrLogoEnabled(enabled);
+    saveAppSettings({ qrLogoEnabled: enabled });
+    if (batchItems.length > 0) {
+      const updated = await Promise.all(
+        batchItems.map(async (it) => {
+          const newQr = await generateQrCodeDataUrl(it.verificationUrl, {
+            enabled,
+            logoType: qrLogoType
+          });
+          return { ...it, qrDataUrl: newQr };
+        })
+      );
+      setBatchItems(updated);
+    }
+  };
+
+  const handleChangeLogoType = async (type: QrLogoType) => {
+    setQrLogoType(type);
+    setQrLogoEnabled(true);
+    saveAppSettings({ qrLogoType: type, qrLogoEnabled: true });
+    if (batchItems.length > 0) {
+      const updated = await Promise.all(
+        batchItems.map(async (it) => {
+          const newQr = await generateQrCodeDataUrl(it.verificationUrl, {
+            enabled: true,
+            logoType: type
+          });
+          return { ...it, qrDataUrl: newQr };
+        })
+      );
+      setBatchItems(updated);
+    }
+  };
 
   // Edit Metadata Modal state
   const [editingItem, setEditingItem] = useState<BatchItem | null>(null);
@@ -490,18 +535,37 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
             : qrSettings.labelText
         };
 
+        // BSrE Official Digital Signature check for batch
+        const activeBsre = getActiveBsreAccount();
+        let itemBsreSignature: any = undefined;
+        if (isBsreAutoSignEnabled() && activeBsre && activeBsre.isLoggedIn) {
+          itemBsreSignature = await signDocumentWithBsre(
+            item.pdfBytes,
+            {
+              documentName: item.documentName || `Ijazah - ${item.studentName}`,
+              documentNumber: item.documentNumber || item.verificationToken,
+              issuer: item.issuer
+            },
+            activeBsre
+          );
+        }
+
         let finalBytes: Uint8Array;
         if (exportMode === 'flattened') {
           finalBytes = await exportFlattenedWithQrCode(
             item.pdfBytes,
             item.qrDataUrl,
-            itemQrSettings
+            itemQrSettings,
+            undefined,
+            itemBsreSignature
           );
         } else {
           finalBytes = await exportOriginalWithQrCode(
             item.pdfBytes,
             item.qrDataUrl,
-            itemQrSettings
+            itemQrSettings,
+            undefined,
+            itemBsreSignature
           );
         }
 
@@ -538,7 +602,8 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
           allowView: true,
           allowDownload: true,
           qrDataUrl: item.qrDataUrl,
-          verificationUrl: item.verificationUrl
+          verificationUrl: item.verificationUrl,
+          bsreSignature: itemBsreSignature
         };
 
         // 3. Simpan ke database Firestore & LocalStorage
@@ -841,6 +906,69 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
               <p className="text-[10px] text-slate-400">
                 Default: <strong>OFF</strong> (hanya kode QR presisi)
               </p>
+            </div>
+
+            {/* Logo Barcode card */}
+            <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400 font-semibold block">Logo Barcode</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20">
+                  Level H (30%)
+                </span>
+              </div>
+              <div className="flex items-center gap-2 pt-0.5">
+                <input
+                  type="checkbox"
+                  id="batchShowLogo"
+                  checked={qrLogoEnabled}
+                  onChange={(e) => handleToggleLogo(e.target.checked)}
+                  className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 h-4 w-4 bg-slate-900"
+                />
+                <label htmlFor="batchShowLogo" className="text-xs text-slate-300 cursor-pointer">
+                  Logo di Tengah Barcode
+                </label>
+              </div>
+
+              {qrLogoEnabled && (
+                <div className="grid grid-cols-3 gap-1 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleChangeLogoType('kemdikbud')}
+                    className={`px-1.5 py-1 rounded text-[10px] font-bold border transition truncate ${
+                      qrLogoType === 'kemdikbud'
+                        ? 'bg-sky-600/30 border-sky-400 text-sky-200'
+                        : 'bg-slate-900 border-slate-700 text-slate-400'
+                    }`}
+                    title="Tut Wuri Handayani (Kemendikbud)"
+                  >
+                    Kemdikbud
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleChangeLogoType('garuda')}
+                    className={`px-1.5 py-1 rounded text-[10px] font-bold border transition truncate ${
+                      qrLogoType === 'garuda'
+                        ? 'bg-amber-600/30 border-amber-400 text-amber-200'
+                        : 'bg-slate-900 border-slate-700 text-slate-400'
+                    }`}
+                    title="Garuda Pancasila"
+                  >
+                    Garuda
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleChangeLogoType('bsre')}
+                    className={`px-1.5 py-1 rounded text-[10px] font-bold border transition truncate ${
+                      qrLogoType === 'bsre'
+                        ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200'
+                        : 'bg-slate-900 border-slate-700 text-slate-400'
+                    }`}
+                    title="BSrE / TTE"
+                  >
+                    BSrE
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="bg-slate-950/60 p-3.5 rounded-2xl border border-slate-800/60 space-y-2">

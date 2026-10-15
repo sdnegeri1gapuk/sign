@@ -16,7 +16,8 @@ import {
   Clock,
   RefreshCw,
   Lock,
-  KeyRound
+  KeyRound,
+  Award
 } from 'lucide-react';
 import { VerifiedDocument } from '../../types';
 import {
@@ -24,6 +25,7 @@ import {
   recordVerificationScan
 } from '../../utils/electronicService';
 import { verifyAndLogin } from '../../utils/adminAuth';
+import { BsreCertificateModal } from './BsreCertificateModal';
 
 interface ElectronicPublicVerifyProps {
   initialToken?: string;
@@ -39,6 +41,7 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
   const [loading, setLoading] = useState<boolean>(Boolean(initialToken.trim()));
   const [copied, setCopied] = useState<boolean>(false);
   const [scanLogged, setScanLogged] = useState<boolean>(false);
+  const [showBsreModal, setShowBsreModal] = useState<boolean>(false);
 
   // Admin PIN prompt state (discreet for administrator only)
   const [showAdminPinModal, setShowAdminPinModal] = useState<boolean>(false);
@@ -221,6 +224,68 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
                       <span className="text-xs text-slate-500 font-semibold block mb-1">Keterangan Dokumen:</span>
                       <p className="text-xs text-slate-700 leading-relaxed">{docData.description}</p>
+                    </div>
+                  )}
+
+                  {/* Tanda Tangan Elektronik Resmi BSrE BSSN Verification Banner */}
+                  {docData.bsreSignature && docData.bsreSignature.isSignedWithBsre && (
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-sky-950/95 via-slate-900 to-sky-900 text-white border border-sky-500/40 shadow-lg space-y-3.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-sky-800/60 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center shrink-0 text-sky-300">
+                            <ShieldCheck className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">
+                              Sertifikasi Digital Republik Indonesia
+                            </span>
+                            <h4 className="font-bold text-white text-sm">
+                              Tanda Tangan Elektronik Resmi BSrE - BSSN
+                            </h4>
+                          </div>
+                        </div>
+
+                        <span className="self-start sm:self-auto px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 uppercase tracking-wide">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                          Sah & Terdaftar di BSSN
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                          <span className="text-slate-400 text-[10px] block">Penandatangan Resmi:</span>
+                          <span className="font-bold text-white text-sm">{docData.bsreSignature.bsreAccountOwner}</span>
+                          <span className="text-sky-300 text-[11px] block">{docData.bsreSignature.signerPosition}</span>
+                          <span className="text-slate-400 font-mono text-[10px]">
+                            NIK: {docData.bsreSignature.signerNik}
+                          </span>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                          <span className="text-slate-400 text-[10px] block">Otoritas Sertifikasi (CA):</span>
+                          <span className="font-bold text-sky-200 text-xs block leading-snug">
+                            {docData.bsreSignature.issuerCa}
+                          </span>
+                          <span className="text-slate-400 font-mono text-[10px] mt-1 block">
+                            SN: {docData.bsreSignature.certificateSerialNumber}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-slate-950/40 border border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-300">
+                        <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          Integritas Dokumen Terjamin (Belum Pernah Diubah)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowBsreModal(true)}
+                          className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition shadow flex items-center gap-1"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>Detail Sertifikat X.509</span>
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -453,6 +518,17 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal Sertifikat Digital BSrE */}
+      {docData?.bsreSignature && (
+        <BsreCertificateModal
+          isOpen={showBsreModal}
+          onClose={() => setShowBsreModal(false)}
+          signatureInfo={docData.bsreSignature}
+          documentName={docData.documentName}
+          documentNumber={docData.documentNumber}
+        />
       )}
     </div>
   );

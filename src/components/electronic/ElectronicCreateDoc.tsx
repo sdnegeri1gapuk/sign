@@ -50,8 +50,13 @@ import {
   triggerPdfDownload,
   triggerImageDownload
 } from '../../utils/pdfElectronicExport';
-import { getAppSettings } from '../../utils/appSettings';
+import { getAppSettings, saveAppSettings, QrLogoType } from '../../utils/appSettings';
 import { extractNomorSuratFromPdf } from '../../utils/documentNumberExtractor';
+import {
+  getActiveBsreAccount,
+  isBsreAutoSignEnabled,
+  signDocumentWithBsre
+} from '../../utils/bsreService';
 
 interface ElectronicCreateDocProps {
   onDocumentCreated?: (doc: VerifiedDocument) => void;
@@ -124,6 +129,36 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
     showLabel: true,
     labelText: 'Scan untuk verifikasi dokumen'
   });
+
+  // Logo di tengah barcode state
+  const initialSettings = getAppSettings();
+  const [qrLogoEnabled, setQrLogoEnabled] = useState<boolean>(initialSettings.qrLogoEnabled);
+  const [qrLogoType, setQrLogoType] = useState<QrLogoType>(initialSettings.qrLogoType);
+
+  const handleToggleLogo = async (enabled: boolean) => {
+    setQrLogoEnabled(enabled);
+    saveAppSettings({ qrLogoEnabled: enabled });
+    if (verificationUrl) {
+      const updated = await generateQrCodeDataUrl(verificationUrl, {
+        enabled,
+        logoType: qrLogoType
+      });
+      setQrDataUrl(updated);
+    }
+  };
+
+  const handleChangeLogoType = async (type: QrLogoType) => {
+    setQrLogoType(type);
+    setQrLogoEnabled(true);
+    saveAppSettings({ qrLogoType: type, qrLogoEnabled: true });
+    if (verificationUrl) {
+      const updated = await generateQrCodeDataUrl(verificationUrl, {
+        enabled: true,
+        logoType: type
+      });
+      setQrDataUrl(updated);
+    }
+  };
 
   // Final preview mode toggle
   const [isPreviewFinal, setIsPreviewFinal] = useState<boolean>(false);
@@ -548,6 +583,23 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
     try {
       const finalName = originalFileName.replace(/\.pdf$/i, '') + '_terverifikasi.pdf';
 
+      // BSrE Official Electronic Signature
+      const activeBsre = getActiveBsreAccount();
+      let bsreSignature: any = undefined;
+      if (isBsreAutoSignEnabled() && activeBsre && activeBsre.isLoggedIn) {
+        setExportProgressText(`Menandatangani dokumen dengan akun resmi BSrE (${activeBsre.namaLengkap})...`);
+        setExportPercent(30);
+        bsreSignature = await signDocumentWithBsre(
+          pdfBytes,
+          {
+            documentName: formData.documentName,
+            documentNumber: formData.documentNumber,
+            issuer: formData.issuer
+          },
+          activeBsre
+        );
+      }
+
       let outputBytes: Uint8Array;
       if (selectedExportMode === 'original') {
         outputBytes = await exportOriginalWithQrCode(
@@ -556,8 +608,9 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
           qrSettings,
           (msg, pct) => {
             setExportProgressText(msg);
-            setExportPercent(pct);
-          }
+            setExportPercent(30 + Math.round(pct * 0.6));
+          },
+          bsreSignature
         );
       } else {
         outputBytes = await exportFlattenedWithQrCode(
@@ -566,8 +619,9 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
           qrSettings,
           (msg, pct) => {
             setExportProgressText(msg);
-            setExportPercent(pct);
-          }
+            setExportPercent(30 + Math.round(pct * 0.6));
+          },
+          bsreSignature
         );
       }
 
@@ -602,7 +656,8 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
         allowDownload: true,
         qrDataUrl,
         verificationUrl,
-        googleDriveUrl: googleDriveUrl.trim()
+        googleDriveUrl: googleDriveUrl.trim(),
+        bsreSignature
       };
 
       await saveVerifiedDocument(newDocRecord);
@@ -1061,6 +1116,65 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
                         placeholder="Scan untuk verifikasi dokumen"
                         className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-[11px]"
                       />
+                    )}
+                  </div>
+
+                  {/* Logo di Tengah Barcode */}
+                  <div className="pt-2 border-t border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-300 font-medium text-xs">Logo di Tengah Barcode</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20">
+                          Resmi
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={qrLogoEnabled}
+                        onChange={(e) => handleToggleLogo(e.target.checked)}
+                        className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
+                      />
+                    </div>
+
+                    {qrLogoEnabled && (
+                      <div className="grid grid-cols-3 gap-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleChangeLogoType('kemdikbud')}
+                          className={`px-1.5 py-1 rounded text-[10px] font-bold border transition truncate ${
+                            qrLogoType === 'kemdikbud'
+                              ? 'bg-sky-600/30 border-sky-400 text-sky-200 ring-1 ring-sky-500/30'
+                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
+                          }`}
+                          title="Tut Wuri Handayani (Kemendikbud)"
+                        >
+                          Kemdikbud
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleChangeLogoType('garuda')}
+                          className={`px-1.5 py-1 rounded text-[10px] font-bold border transition truncate ${
+                            qrLogoType === 'garuda'
+                              ? 'bg-amber-600/30 border-amber-400 text-amber-200 ring-1 ring-amber-500/30'
+                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
+                          }`}
+                          title="Garuda Pancasila"
+                        >
+                          Garuda
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleChangeLogoType('bsre')}
+                          className={`px-1.5 py-1 rounded text-[10px] font-bold border transition truncate ${
+                            qrLogoType === 'bsre'
+                              ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200 ring-1 ring-emerald-500/30'
+                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
+                          }`}
+                          title="BSrE / TTE"
+                        >
+                          BSrE
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

@@ -43,6 +43,25 @@ export interface SignatureTemplate {
 
 export type DocumentStatus = 'VALID' | 'DICABUT' | 'TIDAK VALID';
 
+export interface BsreSignatureInfo {
+  isSignedWithBsre: boolean;
+  bsreAccountOwner: string; // Nama Lengkap Pejabat Pemilik Akun BSrE
+  signerNik: string; // NIK 16-digit terdaftar resmi di BSrE BSSN
+  signerNip?: string; // NIP Pegawai
+  signerPosition: string; // Jabatan Pejabat
+  signerInstansi: string; // Instansi / Lembaga
+  issuerCa: string; // Balai Sertifikasi Elektronik (BSrE) - Badan Siber dan Sandi Negara (BSSN)
+  certificateSerialNumber: string; // Nomor Seri Sertifikat X.509
+  validFrom: string; // Tanggal Terbit Sertifikat
+  validUntil: string; // Tanggal Kedaluwarsa Sertifikat
+  signatureTimestamp: number; // Unix Epoch timestamp penandatanganan
+  documentHashSha256: string; // SHA-256 Digest berkas PDF
+  signatureSealId: string; // ID Segel Digital BSrE
+  tsaTimestamp?: string; // TSA Token
+  integrityStatus: 'VALID_UNMODIFIED' | 'TAMPERED';
+  signatureMode: 'api_besign' | 'pki_p12' | 'verified_account' | 'simulasi_resmi';
+}
+
 export interface VerifiedDocument {
   documentId: string;
   verificationToken: string;
@@ -76,6 +95,7 @@ export interface VerifiedDocument {
   googleDriveUrl?: string;
   legacyBarcodeUrl?: string; // Link hasil scan barcode lama
   isLegacyDocument?: boolean; // Penanda dokumen impor ijazah/arsip lama
+  bsreSignature?: BsreSignatureInfo; // Metadata Tanda Tangan Elektronik Resmi BSrE BSSN
 }
 
 export interface VerificationLog {
