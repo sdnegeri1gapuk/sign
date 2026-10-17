@@ -78,15 +78,24 @@ interface ElectronicUploadIjazahBaruProps {
   onDocumentImported?: (newDoc: VerifiedDocument) => void;
   onGoToSavedDocs?: () => void;
   onOpenVerification?: (token: string) => void;
+  mode?: 'single' | 'batch';
+  onModeChange?: (mode: 'single' | 'batch') => void;
 }
 
 export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProps> = ({
   onDocumentImported,
   onGoToSavedDocs,
-  onOpenVerification
+  onOpenVerification,
+  mode: externalMode,
+  onModeChange
 }) => {
   // Workflow Mode: 'single' (Dokumen Satuan) | 'batch' (Batch Signing / Massal)
-  const [mode, setMode] = useState<'single' | 'batch'>('single');
+  const [internalMode, setInternalMode] = useState<'single' | 'batch'>('single');
+  const mode = externalMode !== undefined ? externalMode : internalMode;
+  const setMode = (newMode: 'single' | 'batch') => {
+    setInternalMode(newMode);
+    if (onModeChange) onModeChange(newMode);
+  };
   const [batchInitialFiles, setBatchInitialFiles] = useState<File[]>([]);
 
   // Single file upload progress state with percentage
@@ -118,12 +127,12 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageDimensions, setPageDimensions] = useState<{ width: number; height: number }[]>([]);
 
-  // Canvas ref, render task and zoom
+  // Canvas ref, render task and zoom (0.78 default fits full A4 page vertically in standard screen)
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const renderTaskRef = useRef<any>(null);
   const [isRenderingPage, setIsRenderingPage] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [zoomScale, setZoomScale] = useState<number>(1.0);
+  const [zoomScale, setZoomScale] = useState<number>(0.78);
 
   // Form Data (Auto-filled from extraction & AppSettings)
   const [formData, setFormData] = useState<ElectronicDocFormData>(() => {
@@ -740,23 +749,24 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
         finalQrData = await generateQrCodeDataUrl(finalVerificationUrl);
       }
 
-      // Penandatanganan Resmi BSrE BSSN (jika diaktifkan dan akun terhubung)
-      let bsreSignature: any = undefined;
-      if (isBsreSignEnabled && bsreAccount && bsreAccount.isLoggedIn) {
-        setExportProgressPercent(35);
-        setExportProgressText(
-          `Menandatangani berkas ijazah secara sah dengan akun BSrE (${bsreAccount.namaLengkap})...`
-        );
-        bsreSignature = await signDocumentWithBsre(
-          pdfBytes,
-          {
-            documentName: formData.documentName.trim() || `Ijazah - ${studentNameExtracted || 'Siswa'}`,
-            documentNumber: formData.documentNumber.trim() || '111202663419179',
-            issuer: formData.issuer.trim()
-          },
-          bsreAccount
-        );
-      }
+      // Penandatanganan Resmi BSrE BSSN (Wajib & Otomatis untuk Semua Ijazah Sah)
+      setExportProgressPercent(35);
+      const activeAccount = bsreAccount || getActiveBsreAccount();
+      const currentSignerName = formData.signerName.trim() || activeAccount.namaLengkap;
+      setExportProgressText(
+        `Menandatangani berkas ijazah secara sah dengan TTE Resmi BSrE BSSN (${currentSignerName})...`
+      );
+      const bsreSignature = await signDocumentWithBsre(
+        pdfBytes,
+        {
+          documentName: formData.documentName.trim() || `Ijazah - ${studentNameExtracted || 'Siswa'}`,
+          documentNumber: formData.documentNumber.trim() || '111202663419179',
+          issuer: formData.issuer.trim(),
+          signerName: currentSignerName,
+          signerPosition: formData.signerPosition.trim() || activeAccount.jabatan
+        },
+        activeAccount
+      );
 
       setExportProgressPercent(50);
       setExportProgressText(
@@ -872,46 +882,48 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
   const currentPageDim = pageDimensions[currentPage - 1] || { width: 595, height: 842 };
 
   return (
-    <div className="space-y-6">
-      {/* Mode Switcher: Dokumen Tunggal vs Batch Signing */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-2 flex flex-wrap items-center justify-between gap-3 shadow-xl">
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setMode('single')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
-              mode === 'single'
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 ring-1 ring-emerald-400/30'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4 text-emerald-300" />
-            <span>Dokumen Tunggal</span>
-          </button>
+    <div className="space-y-3">
+      {/* Mode Switcher: Dokumen Tunggal vs Batch Signing (Hanya tampil jika tidak dikendalikan oleh menu atas) */}
+      {externalMode === undefined && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-1.5 flex flex-wrap items-center justify-between gap-2 shadow-md">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMode('single')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs transition flex items-center gap-1.5 ${
+                mode === 'single'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Dokumen Tunggal</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setMode('batch')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
-              mode === 'batch'
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 ring-1 ring-emerald-400/30'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Layers className="w-4 h-4 text-teal-300" />
-            <span>Batch Signing</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => setMode('batch')}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs transition flex items-center gap-1.5 ${
+                mode === 'batch'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 text-teal-300" />
+              <span>Batch Signing</span>
+            </button>
+          </div>
 
-        <div className="hidden lg:flex items-center gap-2 text-xs text-slate-400 px-3">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>
-            {mode === 'single'
-              ? 'Mode Satuan: Sesuaikan posisi barcode per lembar'
-              : 'Mode Batch: Ekstraksi & tanda tangani serentak'}
-          </span>
+          <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-400 px-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>
+              {mode === 'single'
+                ? 'Mode Satuan: Sesuaikan posisi barcode per lembar'
+                : 'Mode Batch: Ekstraksi & tanda tangani serentak'}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {mode === 'batch' ? (
         <ElectronicBatchSigningIjazah
@@ -1069,27 +1081,27 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
 
       {/* STEP 2: FORM DATA & INTERACTIVE VISUAL PLACEMENT EDITOR */}
       {step === 'editor' && (
-        <div className="space-y-6">
-          {/* Active File Bar */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 shadow-xl">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-                <FileText className="w-5 h-5" />
+        <div className="space-y-3">
+          {/* Active File Bar (Compact 1-row) */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-2 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                <FileText className="w-4 h-4" />
               </div>
               <div>
-                <p className="font-bold text-white text-sm truncate max-w-sm sm:max-w-md" title={fileName}>
+                <p className="font-bold text-white text-xs truncate max-w-xs sm:max-w-md" title={fileName}>
                   {fileName}
                 </p>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[10px] text-slate-400">
                   {numPages} Halaman • {fileSizeStr} •{' '}
-                  <span className="text-emerald-400 font-semibold">Data Berhasil Diekstrak Otomatis</span>
+                  <span className="text-emerald-400 font-semibold">Data Terbaca Otomatis</span>
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <label className="cursor-pointer px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5">
-                <Upload className="w-3.5 h-3.5" />
+              <label className="cursor-pointer px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5">
+                <Upload className="w-3 h-3" />
                 <span>Ganti File</span>
                 <input
                   type="file"
@@ -1101,43 +1113,43 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
 
               <button
                 onClick={() => setIsPreviewFinal(!isPreviewFinal)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition flex items-center gap-1.5 ${
                   isPreviewFinal
                     ? 'bg-emerald-600 text-white border-emerald-500'
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                 }`}
               >
-                <Eye className="w-3.5 h-3.5" />
+                <Eye className="w-3 h-3" />
                 <span>{isPreviewFinal ? 'Mode Edit' : 'Preview'}</span>
               </button>
 
               <button
                 onClick={() => setIsExportModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5"
+                className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition flex items-center gap-1.5"
               >
-                <ShieldCheck className="w-4 h-4" />
+                <ShieldCheck className="w-3.5 h-3.5" />
                 <span>Simpan Ijazah</span>
               </button>
             </div>
           </div>
 
           {/* Two-Column Layout: Form & Settings Left, Canvas Right */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
             {/* Left Column: Form Data & Barcode Controls */}
-            <div className="lg:col-span-4 space-y-4">
-              {/* Form Data Card: Hanya menampilkan 7 data utama ijazah (tanpa poin 8 & 9) */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
+            <div className="lg:col-span-4 space-y-2.5 max-h-[calc(100vh-140px)] overflow-y-auto pr-1">
+              {/* Form Data Card: Hanya menampilkan data utama ijazah yang terbaca otomatis */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 shadow-md space-y-2.5 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-1.5">
                     <GraduationCap className="w-4 h-4 text-emerald-400" />
-                    <h4 className="font-bold text-sm text-white">DATA IJAZAH (AUTO-FILLED)</h4>
+                    <h4 className="font-bold text-xs text-white">DATA IJAZAH (AUTO-FILLED)</h4>
                   </div>
-                  <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                     Otomatis
                   </span>
                 </div>
 
-                <div className="space-y-3 text-xs">
+                <div className="space-y-2">
                   <div>
                     <label className="text-slate-400 block mb-1 font-medium">1. Nama Dokumen</label>
                     <input
@@ -1145,70 +1157,13 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                       value={formData.documentName}
                       onChange={(e) => setFormData({ ...formData, documentName: e.target.value })}
                       placeholder="Ijazah - Nama Siswa"
-                      className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-3 py-2 text-white font-semibold transition"
+                      className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-white font-semibold transition"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-slate-400 font-medium">2. Jenis Dokumen</label>
-                        <span className="text-[10px] text-slate-500 font-mono">
-                          {formData.documentType?.toLowerCase().includes('transkrip') ? '(X:344 Y:662)' : '(X:346 Y:622)'}
-                        </span>
-                      </div>
-                      <div className="flex gap-1 mb-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newType = 'Ijazah';
-                            setFormData((prev) => ({
-                              ...prev,
-                              documentType: newType,
-                              documentName: prev.documentName.replace(/^Transkrip/i, 'Ijazah')
-                            }));
-                            const pos = getDefaultBarcodePosition(newType);
-                            setQrSettings((prev) => ({
-                              ...prev,
-                              x: pos.x,
-                              y: pos.y,
-                              labelText: 'Scan Verifikasi Ijazah'
-                            }));
-                          }}
-                          className={`flex-1 py-1 px-1 rounded-md text-[10px] font-bold transition border ${
-                            !formData.documentType?.toLowerCase().includes('transkrip')
-                              ? 'bg-emerald-600 text-white border-emerald-500 shadow'
-                              : 'bg-slate-800 text-slate-400 hover:text-white border-slate-700'
-                          }`}
-                        >
-                          Ijazah
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newType = 'Transkrip';
-                            setFormData((prev) => ({
-                              ...prev,
-                              documentType: newType,
-                              documentName: prev.documentName.replace(/^Ijazah/i, 'Transkrip')
-                            }));
-                            const pos = getDefaultBarcodePosition(newType);
-                            setQrSettings((prev) => ({
-                              ...prev,
-                              x: pos.x,
-                              y: pos.y,
-                              labelText: 'Scan Verifikasi Transkrip'
-                            }));
-                          }}
-                          className={`flex-1 py-1 px-1 rounded-md text-[10px] font-bold transition border ${
-                            formData.documentType?.toLowerCase().includes('transkrip')
-                              ? 'bg-cyan-600 text-white border-cyan-500 shadow'
-                              : 'bg-slate-800 text-slate-400 hover:text-white border-slate-700'
-                          }`}
-                        >
-                          Transkrip
-                        </button>
-                      </div>
+                      <label className="text-slate-400 block mb-1 font-medium">2. Jenis Dokumen</label>
                       <input
                         type="text"
                         value={formData.documentType}
@@ -1219,7 +1174,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                           setQrSettings((prev) => ({ ...prev, x: pos.x, y: pos.y }));
                         }}
                         placeholder="Ijazah"
-                        className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-white transition text-xs"
+                        className="w-full bg-slate-800 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-white transition text-xs font-semibold"
                       />
                     </div>
                     <div>
@@ -1313,77 +1268,18 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
               </div>
 
               {/* Barcode Positioning Settings */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4 text-xs">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                  <div className="flex items-center gap-2">
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 shadow-md space-y-2.5 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-1.5">
                     <Settings2 className="w-4 h-4 text-emerald-400" />
-                    <h4 className="font-bold text-white">POSISI & UKURAN BARCODE</h4>
+                    <h4 className="font-bold text-xs text-white">POSISI & UKURAN BARCODE</h4>
                   </div>
                   <span className="text-[10px] text-emerald-400 font-mono">
                     X:{qrSettings.x} Y:{qrSettings.y}
                   </span>
                 </div>
 
-                {/* Quick Presets for Diplomas */}
-                <div className="space-y-1.5">
-                  <span className="text-slate-400 block font-medium">Penempatan Posisi Barcode:</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handlePresetPosition('default-ijazah')}
-                      className={`px-2.5 py-2 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1.5 border shadow ${
-                        !formData.documentType?.toLowerCase().includes('transkrip')
-                          ? 'bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-200 border-emerald-500/60 ring-1 ring-emerald-500/30'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                      }`}
-                      title="Posisi barcode standar Ijazah: X: 346, Y: 622"
-                    >
-                      <span>Default Ijazah (346, 622)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePresetPosition('default-transkrip')}
-                      className={`px-2.5 py-2 rounded-lg text-[11px] font-bold text-center transition flex items-center justify-center gap-1.5 border shadow ${
-                        formData.documentType?.toLowerCase().includes('transkrip')
-                          ? 'bg-cyan-600/30 hover:bg-cyan-600/40 text-cyan-200 border-cyan-500/60 ring-1 ring-cyan-500/30'
-                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
-                      }`}
-                      title="Posisi barcode standar Transkrip: X: 344, Y: 662"
-                    >
-                      <span>Default Transkrip (344, 662)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePresetPosition('bottom-right')}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-center transition"
-                    >
-                      Kanan Bawah
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePresetPosition('bottom-left')}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-center transition"
-                    >
-                      Kiri Bawah
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePresetPosition('bottom-center')}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-center transition"
-                    >
-                      Tengah Bawah
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePresetPosition('top-right')}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-semibold text-center transition"
-                    >
-                      Kanan Atas
-                    </button>
-                  </div>
-                </div>
-
-                {/* Dimension inputs: default x:346, y:622, size:85 */}
+                {/* Dimension inputs: textbox input saja */}
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="text-slate-400 block mb-1">Ukuran (pt)</label>
@@ -1396,7 +1292,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                         const val = Number(e.target.value);
                         setQrSettings({ ...qrSettings, width: val, height: val });
                       }}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono text-xs"
                     />
                   </div>
                   <div>
@@ -1407,7 +1303,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                       onChange={(e) =>
                         setQrSettings({ ...qrSettings, x: Number(e.target.value) })
                       }
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono text-xs"
                     />
                   </div>
                   <div>
@@ -1418,15 +1314,15 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                       onChange={(e) =>
                         setQrSettings({ ...qrSettings, y: Number(e.target.value) })
                       }
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono text-xs"
                     />
                   </div>
                 </div>
 
                 {/* Label toggle: default OFF (false) */}
-                <div className="pt-2 border-t border-slate-800 space-y-2">
+                <div className="pt-2 border-t border-slate-800 space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-300 font-medium">Tampilkan Label Keterangan Barcode</span>
+                    <span className="text-slate-300 font-medium text-[11px]">Tampilkan Label Keterangan Barcode</span>
                     <input
                       type="checkbox"
                       checked={qrSettings.showLabel}
@@ -1444,92 +1340,15 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                         setQrSettings({ ...qrSettings, labelText: e.target.value })
                       }
                       placeholder="Scan Verifikasi Ijazah"
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-xs"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-white text-xs"
                     />
-                  )}
-                </div>
-
-                {/* Logo di Tengah Barcode Controls */}
-                <div className="pt-2 border-t border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-slate-300 font-medium">Logo di Tengah Barcode</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20">
-                        Scan Level H
-                      </span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={qrLogoEnabled}
-                      onChange={(e) => handleToggleLogo(e.target.checked)}
-                      className="w-4 h-4 accent-emerald-500 rounded cursor-pointer"
-                    />
-                  </div>
-
-                  {qrLogoEnabled && (
-                    <div className="space-y-1">
-                      <div className="grid grid-cols-3 gap-1 pt-0.5">
-                        <button
-                          type="button"
-                          onClick={() => handleChangeLogoType('kemdikbud')}
-                          className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center truncate ${
-                            qrLogoType === 'kemdikbud'
-                              ? 'bg-sky-600/30 border-sky-400 text-sky-200 ring-1 ring-sky-500/30'
-                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
-                          }`}
-                          title="Tut Wuri Handayani (Kemendikbud)"
-                        >
-                          🎓 Kemdikbud
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleChangeLogoType('garuda')}
-                          className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center truncate ${
-                            qrLogoType === 'garuda'
-                              ? 'bg-amber-600/30 border-amber-400 text-amber-200 ring-1 ring-amber-500/30'
-                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
-                          }`}
-                          title="Lambang Garuda Pancasila"
-                        >
-                          🦅 Garuda
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleChangeLogoType('bsre')}
-                          className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center truncate ${
-                            qrLogoType === 'bsre'
-                              ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200 ring-1 ring-emerald-500/30'
-                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
-                          }`}
-                          title="Balai Sertifikasi Elektronik / TTE"
-                        >
-                          🛡️ BSrE
-                        </button>
-                      </div>
-
-                      {initialSettings.qrCustomLogoDataUrl && (
-                        <button
-                          type="button"
-                          onClick={() => handleChangeLogoType('custom')}
-                          className={`w-full mt-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition flex items-center justify-center gap-1.5 ${
-                            qrLogoType === 'custom'
-                              ? 'bg-purple-600/30 border-purple-400 text-purple-200 ring-1 ring-purple-500/30'
-                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-300'
-                          }`}
-                        >
-                          <span>🏫 Gunakan Logo Kustom Sekolah</span>
-                        </button>
-                      )}
-                    </div>
                   )}
                 </div>
 
                 {/* Multi-page selector if diploma has transcript or multiple pages */}
                 {numPages > 1 && (
                   <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-                    <span className="text-slate-300 font-medium">Tempel pada Halaman:</span>
+                    <span className="text-slate-300 font-medium text-[11px]">Tempel pada Halaman:</span>
                     <select
                       value={qrSettings.pageNumber}
                       onChange={(e) => {
@@ -1599,52 +1418,44 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                   </div>
                 ) : (
                   <div className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/60 text-slate-300 space-y-2">
-                    <p className="text-[11px] leading-relaxed">
-                      Hubungkan akun penandatangan resmi BSrE untuk membubuhkan tanda tangan elektronik sah berkekuatan hukum penuh (UU ITE).
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white text-xs">Akun Default BSrE</span>
+                      <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">
+                        Otomatis Aktif
+                      </span>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-slate-300">
+                      Tanda tangan digital BSrE BSSN otomatis disematkan menggunakan identitas Kepala Sekolah / Penandatangan pada formulir di atas.
                     </p>
                     <button
                       type="button"
                       onClick={() => setIsBsreLoginModalOpen(true)}
-                      className="w-full py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow"
+                      className="w-full py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition"
                     >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Login Pemilik Akun BSrE</span>
+                      <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Hubungkan / Ganti Akun Lain</span>
                     </button>
                   </div>
                 )}
 
-                {/* Auto Sign Toggle */}
-                <div className="pt-1 border-t border-slate-800 space-y-2">
-                  <label className="flex items-center justify-between cursor-pointer">
-                    <span className="text-slate-300 font-medium">
-                      Bubuhkan TTE Resmi BSrE:
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={isBsreSignEnabled && Boolean(bsreAccount?.isLoggedIn)}
-                      disabled={!bsreAccount?.isLoggedIn}
-                      onChange={(e) => {
-                        const val = e.target.checked;
-                        setIsBsreSignEnabled(val);
-                        setBsreAutoSignEnabled(val);
-                      }}
-                      className="w-4 h-4 rounded text-sky-600 bg-slate-800 border-slate-700 focus:ring-sky-500"
-                    />
-                  </label>
-                  <p className="text-[10px] text-slate-400 leading-normal">
-                    {isBsreSignEnabled && bsreAccount?.isLoggedIn
-                      ? '✓ Ijazah akan otomatis dibubuhi cap digital BSrE, hash SHA-256, dan catatan kaki legal BSSN.'
-                      : 'Aktifkan untuk menyertakan tanda tangan digital resmi BSrE pada ijazah & barcode.'}
-                  </p>
+                {/* Auto Sign Status (Always Active) */}
+                <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-300 font-medium flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>TTE Kriptografis BSrE:</span>
+                  </span>
+                  <span className="text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-800/60 text-[10px]">
+                    ✓ Aktif & Otomatis
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Right Column: Interactive Canvas Preview */}
-            <div className="lg:col-span-8 space-y-3">
-              {/* Toolbar */}
-              <div className="bg-slate-900/90 border border-slate-800 rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-xl">
-                <div className="flex items-center gap-3">
+            <div className="lg:col-span-8 space-y-2.5">
+              {/* Toolbar (Compact) */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 shadow-md">
+                <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-white">
                     Halaman {currentPage} dari {numPages}
                   </span>
@@ -1654,7 +1465,7 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                         <button
                           key={p}
                           onClick={() => setCurrentPage(p)}
-                          className={`px-2 py-0.5 rounded text-[11px] font-semibold transition ${
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold transition ${
                             currentPage === p
                               ? 'bg-emerald-600 text-white'
                               : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -1667,16 +1478,16 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                   )}
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setZoomScale((z) => Math.max(0.5, z - 0.1))}
                       className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
                       title="Zoom Out"
                     >
-                      <ZoomOut className="w-4 h-4" />
+                      <ZoomOut className="w-3.5 h-3.5" />
                     </button>
-                    <span className="font-mono text-xs w-12 text-center text-slate-300">
+                    <span className="font-mono text-xs w-11 text-center text-slate-300">
                       {Math.round(zoomScale * 100)}%
                     </span>
                     <button
@@ -1684,23 +1495,31 @@ export const ElectronicUploadIjazahBaru: React.FC<ElectronicUploadIjazahBaruProp
                       className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white"
                       title="Zoom In"
                     >
-                      <ZoomIn className="w-4 h-4" />
+                      <ZoomIn className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
                   <button
+                    onClick={() => setZoomScale(0.78)}
+                    className="px-2 py-0.5 rounded bg-emerald-800/50 hover:bg-emerald-700/60 text-emerald-200 border border-emerald-600/40 text-[10px] font-semibold transition"
+                    title="Sesuaikan ukuran penuh 1 layar"
+                  >
+                    Pas Layar
+                  </button>
+
+                  <button
                     onClick={() => setZoomScale(1.0)}
-                    className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
+                    className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
                   >
                     100%
                   </button>
                 </div>
               </div>
 
-              {/* Viewport Canvas Container */}
+              {/* Viewport Canvas Container: Fits 1-screen height */}
               <div
                 ref={containerRef}
-                className="bg-slate-950 border border-slate-800 rounded-2xl p-4 overflow-auto flex flex-col justify-start items-center min-h-[550px] shadow-2xl relative"
+                className="bg-slate-950 border border-slate-800 rounded-xl p-3 overflow-auto flex flex-col justify-start items-center h-[calc(100vh-175px)] min-h-[460px] shadow-2xl relative"
               >
                 <div
                   className="relative shadow-2xl bg-white select-none border border-slate-700/60"

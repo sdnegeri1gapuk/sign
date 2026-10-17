@@ -179,28 +179,25 @@ export async function exportOriginalWithQrCode(
   if (bsreSignature && bsreSignature.isSignedWithBsre) {
     onProgress?.('Membubuhkan TTE Kriptografis ISO 32000-1 PAdES/PKCS#7 Resmi BSrE BSSN...', 95);
     const activeAcc = getActiveBsreAccount();
-    const fallbackAcc = {
-      id: 'bsre_active',
-      nik: bsreSignature.signerNik,
-      namaLengkap: bsreSignature.bsreAccountOwner,
-      nip: bsreSignature.signerNip,
-      jabatan: bsreSignature.signerPosition,
-      instansi: bsreSignature.signerInstansi,
-      email: `${bsreSignature.signerNik}@bsre.bssn.go.id`,
-      nomorSeriSertifikat: bsreSignature.certificateSerialNumber,
-      masaBerlakuDari: bsreSignature.validFrom,
-      masaBerlakuSampai: bsreSignature.validUntil,
-      penerbitCa: bsreSignature.issuerCa,
-      rootCa: 'Otoritas Sertifikasi Digital Republik Indonesia (Root CA)',
-      statusSertifikat: 'AKTIF' as const,
-      tipeKoneksi: 'api_besign' as const,
+    const targetAccount = {
+      ...activeAcc,
+      namaLengkap: bsreSignature.bsreAccountOwner || activeAcc.namaLengkap,
+      jabatan: bsreSignature.signerPosition || activeAcc.jabatan,
+      instansi: bsreSignature.signerInstansi || activeAcc.instansi,
+      nip: bsreSignature.signerNip || activeAcc.nip,
+      nik: bsreSignature.signerNik || activeAcc.nik,
+      email: `${bsreSignature.signerNik || activeAcc.nik}@bsre.bssn.go.id`,
+      nomorSeriSertifikat: bsreSignature.certificateSerialNumber || activeAcc.nomorSeriSertifikat,
+      masaBerlakuDari: bsreSignature.validFrom || activeAcc.masaBerlakuDari,
+      masaBerlakuSampai: bsreSignature.validUntil || activeAcc.masaBerlakuSampai,
+      penerbitCa: bsreSignature.issuerCa || activeAcc.penerbitCa,
       isLoggedIn: true
     };
     try {
       const padesSignedBytes = await signPdfWithBsrePades(
         finalBytes,
         bsreSignature,
-        activeAcc || fallbackAcc
+        targetAccount
       );
       onProgress?.('✓ Tanda tangan digital resmi BSrE BSSN berhasil dibubuhkan', 100);
       return padesSignedBytes;
@@ -328,28 +325,25 @@ export async function exportFlattenedWithQrCode(
   if (bsreSignature && bsreSignature.isSignedWithBsre) {
     onProgress?.('Membubuhkan TTE Kriptografis ISO 32000-1 PAdES/PKCS#7 Resmi BSrE BSSN...', 95);
     const activeAcc = getActiveBsreAccount();
-    const fallbackAcc = {
-      id: 'bsre_active',
-      nik: bsreSignature.signerNik,
-      namaLengkap: bsreSignature.bsreAccountOwner,
-      nip: bsreSignature.signerNip,
-      jabatan: bsreSignature.signerPosition,
-      instansi: bsreSignature.signerInstansi,
-      email: `${bsreSignature.signerNik}@bsre.bssn.go.id`,
-      nomorSeriSertifikat: bsreSignature.certificateSerialNumber,
-      masaBerlakuDari: bsreSignature.validFrom,
-      masaBerlakuSampai: bsreSignature.validUntil,
-      penerbitCa: bsreSignature.issuerCa,
-      rootCa: 'Otoritas Sertifikasi Digital Republik Indonesia (Root CA)',
-      statusSertifikat: 'AKTIF' as const,
-      tipeKoneksi: 'api_besign' as const,
+    const targetAccount = {
+      ...activeAcc,
+      namaLengkap: bsreSignature.bsreAccountOwner || activeAcc.namaLengkap,
+      jabatan: bsreSignature.signerPosition || activeAcc.jabatan,
+      instansi: bsreSignature.signerInstansi || activeAcc.instansi,
+      nip: bsreSignature.signerNip || activeAcc.nip,
+      nik: bsreSignature.signerNik || activeAcc.nik,
+      email: `${bsreSignature.signerNik || activeAcc.nik}@bsre.bssn.go.id`,
+      nomorSeriSertifikat: bsreSignature.certificateSerialNumber || activeAcc.nomorSeriSertifikat,
+      masaBerlakuDari: bsreSignature.validFrom || activeAcc.masaBerlakuDari,
+      masaBerlakuSampai: bsreSignature.validUntil || activeAcc.masaBerlakuSampai,
+      penerbitCa: bsreSignature.issuerCa || activeAcc.penerbitCa,
       isLoggedIn: true
     };
     try {
       const padesSignedBytes = await signPdfWithBsrePades(
         finalBytes,
         bsreSignature,
-        activeAcc || fallbackAcc
+        targetAccount
       );
       onProgress?.('✓ Tanda tangan digital resmi BSrE BSSN berhasil dibubuhkan', 100);
       return padesSignedBytes;

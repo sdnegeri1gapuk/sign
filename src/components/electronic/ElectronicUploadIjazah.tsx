@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GraduationCap, QrCode, FileText, Sparkles, Archive } from 'lucide-react';
+import { GraduationCap, Archive, FileText, Layers } from 'lucide-react';
 import { VerifiedDocument } from '../../types';
 import { ElectronicUploadIjazahBaru } from './ElectronicUploadIjazahBaru';
 import { ElectronicImportLegacy } from './ElectronicImportLegacy';
@@ -17,46 +17,87 @@ export const ElectronicUploadIjazah: React.FC<ElectronicUploadIjazahProps> = ({
 }) => {
   // Tab selector: 'baru' is prioritized and shown by default when opening "Upload Ijazah"
   const [activeTab, setActiveTab] = useState<'baru' | 'lama'>('baru');
+  // Mode selector: 'single' (Dokumen Tunggal) vs 'batch' (Batch Signing)
+  const [mode, setMode] = useState<'single' | 'batch'>('single');
 
   return (
-    <div className="space-y-6">
-      {/* Tab Switcher Header (Ijazah Baru vs Ijazah Lama) */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-2 shadow-xl flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Tab 1: Ijazah Baru */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('baru')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
-              activeTab === 'baru'
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-600/25 ring-1 ring-emerald-400/30'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <GraduationCap className="w-4 h-4 text-emerald-300" />
-            <span>Ijazah Baru</span>
-          </button>
+    <div className="space-y-3">
+      {/* Ultra-compact top consolidated bar: Ijazah Baru/Lama + Dokumen Tunggal/Batch */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-2.5 py-1.5 shadow-md flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Main Category: Ijazah Baru vs Lama */}
+          <div className="bg-slate-950/80 p-0.5 rounded-lg border border-slate-800/80 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('baru')}
+              className={`px-3 py-1.5 rounded-md font-bold text-xs transition flex items-center gap-1.5 ${
+                activeTab === 'baru'
+                  ? 'bg-emerald-600 text-white shadow-xs ring-1 ring-emerald-400/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Ijazah Baru</span>
+            </button>
 
-          {/* Tab 2: Ijazah Lama */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('lama')}
-            className={`px-4 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
-              activeTab === 'lama'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/25 ring-1 ring-purple-400/30'
-                : 'text-purple-300 hover:text-white hover:bg-purple-950/40 border border-purple-800/30'
-            }`}
-          >
-            <Archive className="w-4 h-4 text-purple-300" />
-            <span>Ijazah Lama</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('lama')}
+              className={`px-3 py-1.5 rounded-md font-bold text-xs transition flex items-center gap-1.5 ${
+                activeTab === 'lama'
+                  ? 'bg-purple-600 text-white shadow-xs ring-1 ring-purple-400/30'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+              }`}
+            >
+              <Archive className="w-3.5 h-3.5 text-purple-300" />
+              <span>Ijazah Lama</span>
+            </button>
+          </div>
+
+          {/* Sub-modes for Ijazah Baru: Dokumen Tunggal vs Batch Signing */}
+          {activeTab === 'baru' && (
+            <>
+              <div className="h-4 w-px bg-slate-800 mx-1 hidden sm:block" />
+              <div className="bg-slate-950/80 p-0.5 rounded-lg border border-slate-800/80 flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setMode('single')}
+                  className={`px-3 py-1.5 rounded-md font-semibold text-xs transition flex items-center gap-1.5 ${
+                    mode === 'single'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs shadow-emerald-600/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Dokumen Tunggal</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMode('batch')}
+                  className={`px-3 py-1.5 rounded-md font-semibold text-xs transition flex items-center gap-1.5 ${
+                    mode === 'batch'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs shadow-emerald-600/20'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5 text-teal-300" />
+                  <span>Batch Signing</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Tab Indicator Pill */}
-        <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 px-3">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        {/* Space-saving status pill */}
+        <div className="hidden lg:flex items-center gap-1.5 text-[11px] text-slate-400 px-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           <span>
-            {activeTab === 'baru' ? 'Ijazah Baru' : 'Ijazah Lama'}
+            {activeTab === 'lama'
+              ? 'Mode Ijazah Lama'
+              : mode === 'single'
+              ? 'Mode Satuan: Barcode Interaktif'
+              : 'Mode Batch: Massal'}
           </span>
         </div>
       </div>
@@ -67,6 +108,8 @@ export const ElectronicUploadIjazah: React.FC<ElectronicUploadIjazahProps> = ({
           onDocumentImported={onDocumentImported}
           onGoToSavedDocs={onGoToSavedDocs}
           onOpenVerification={onOpenVerification}
+          mode={mode}
+          onModeChange={setMode}
         />
       ) : (
         <ElectronicImportLegacy

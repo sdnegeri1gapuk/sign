@@ -535,20 +535,19 @@ export const ElectronicBatchSigningIjazah: React.FC<ElectronicBatchSigningIjazah
             : qrSettings.labelText
         };
 
-        // BSrE Official Digital Signature check for batch
+        // BSrE Official Digital Signature for batch items (Wajib & Otomatis)
         const activeBsre = getActiveBsreAccount();
-        let itemBsreSignature: any = undefined;
-        if (isBsreAutoSignEnabled() && activeBsre && activeBsre.isLoggedIn) {
-          itemBsreSignature = await signDocumentWithBsre(
-            item.pdfBytes,
-            {
-              documentName: item.documentName || `Ijazah - ${item.studentName}`,
-              documentNumber: item.documentNumber || item.verificationToken,
-              issuer: item.issuer
-            },
-            activeBsre
-          );
-        }
+        const itemBsreSignature = await signDocumentWithBsre(
+          item.pdfBytes,
+          {
+            documentName: item.documentName || `Ijazah - ${item.studentName}`,
+            documentNumber: item.documentNumber || item.verificationToken,
+            issuer: item.issuer || activeBsre.instansi,
+            signerName: item.signerName || activeBsre.namaLengkap,
+            signerPosition: item.signerPosition || activeBsre.jabatan
+          },
+          activeBsre
+        );
 
         let finalBytes: Uint8Array;
         if (exportMode === 'flattened') {

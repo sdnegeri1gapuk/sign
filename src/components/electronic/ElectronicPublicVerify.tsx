@@ -27,7 +27,8 @@ import { VerifiedDocument } from '../../types';
 import {
   getVerifiedDocumentByToken,
   recordVerificationScan,
-  getAllVerifiedDocuments
+  getAllVerifiedDocuments,
+  ensureDocumentBsreSignature
 } from '../../utils/electronicService';
 import { verifyAndLogin } from '../../utils/adminAuth';
 import { BsreCertificateModal } from './BsreCertificateModal';
@@ -301,99 +302,107 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
                   )}
 
                   {/* TANDA TANGAN ELEKTRONIK RESMI BSrE BSSN CARD (FORMAT SERTIFIKAT RESMI PEMERINTAH) */}
-                  {docData.bsreSignature && docData.bsreSignature.isSignedWithBsre && (
-                    <div className="p-5 rounded-2xl bg-gradient-to-br from-sky-950 via-slate-900 to-sky-950 text-white border border-sky-500/40 shadow-xl space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-sky-800/60 pb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center shrink-0 text-sky-300 shadow-sm">
-                            <Shield className="w-6 h-6" />
+                  {(() => {
+                    const effectiveBsreSignature =
+                      docData.bsreSignature && docData.bsreSignature.isSignedWithBsre
+                        ? docData.bsreSignature
+                        : ensureDocumentBsreSignature(docData).bsreSignature;
+
+                    if (!effectiveBsreSignature) return null;
+
+                    return (
+                      <div className="p-5 rounded-2xl bg-gradient-to-br from-sky-950 via-slate-900 to-sky-950 text-white border border-sky-500/40 shadow-xl space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-sky-800/60 pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center shrink-0 text-sky-300 shadow-sm">
+                              <Shield className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">
+                                Sertifikasi Digital Republik Indonesia
+                              </span>
+                              <h4 className="font-bold text-white text-sm sm:text-base">
+                                Tanda Tangan Elektronik Resmi BSrE - BSSN
+                              </h4>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">
-                              Sertifikasi Digital Republik Indonesia
+
+                          <span className="self-start sm:self-auto px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 uppercase tracking-wide">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            Sah & Terdaftar di BSSN
+                          </span>
+                        </div>
+
+                        {/* Detail Sertifikat (Sesuai Standar BSrE - TANPA NIK) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60 space-y-0.5">
+                            <span className="text-slate-400 block text-[11px] font-semibold">Pemilik Sertifikat / Akun:</span>
+                            <span className="font-bold text-white text-sm block">{effectiveBsreSignature.bsreAccountOwner}</span>
+                            <span className="text-[11px] text-sky-300 block font-medium">
+                              {effectiveBsreSignature.signerPosition} • {effectiveBsreSignature.signerInstansi}
                             </span>
-                            <h4 className="font-bold text-white text-sm sm:text-base">
-                              Tanda Tangan Elektronik Resmi BSrE - BSSN
-                            </h4>
+                            {effectiveBsreSignature.signerNip && (
+                              <span className="text-[10px] text-slate-300 block font-mono mt-1">
+                                NIP: {effectiveBsreSignature.signerNip}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60 space-y-0.5">
+                            <span className="text-slate-400 block text-[11px] font-semibold">Otoritas Penerbit Sertifikat:</span>
+                            <span className="font-bold text-sky-300 block text-xs leading-snug">{effectiveBsreSignature.issuerCa}</span>
+                            <span className="text-[10px] text-slate-400 block">Badan Siber dan Sandi Negara Republik Indonesia</span>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60 font-mono text-[11px]">
+                            <span className="text-slate-400 block font-sans text-[11px] font-semibold">Nomor Seri Sertifikat:</span>
+                            <span className="text-emerald-400 font-bold break-all mt-0.5 block">{effectiveBsreSignature.certificateSerialNumber}</span>
+                            <span className="text-[10px] text-slate-400 font-sans block mt-0.5">Standar Kriptografi: SHA-256 with RSA (2048-bit)</span>
+                          </div>
+
+                          <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60">
+                            <span className="text-slate-400 block text-[11px] font-semibold">Integritas Dokumen:</span>
+                            <span className="text-emerald-400 font-bold flex items-center gap-1.5 mt-0.5">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                              Utuh & Belum Pernah Dimodifikasi
+                            </span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              Kekuatan Hukum: UU ITE No. 11/2008 & PP No. 71/2019
+                            </span>
                           </div>
                         </div>
 
-                        <span className="self-start sm:self-auto px-3 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 uppercase tracking-wide">
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                          Sah & Terdaftar di BSSN
-                        </span>
-                      </div>
+                        {/* Baris Timestamp & Tombol Sertifikat X.509 */}
+                        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-sky-800/40">
+                          <div className="text-[11px] text-slate-300 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                            <span>Ditandatangani secara elektronik: <strong className="text-white">{formatDate(effectiveBsreSignature.signatureTimestamp)}</strong></span>
+                          </div>
 
-                      {/* Detail Sertifikat (Sesuai Standar BSrE - TANPA NIK) */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                        <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60 space-y-0.5">
-                          <span className="text-slate-400 block text-[11px] font-semibold">Pemilik Sertifikat / Akun:</span>
-                          <span className="font-bold text-white text-sm block">{docData.bsreSignature.bsreAccountOwner}</span>
-                          <span className="text-[11px] text-sky-300 block font-medium">
-                            {docData.bsreSignature.signerPosition} • {docData.bsreSignature.signerInstansi}
-                          </span>
-                          {/* Hanya tampilkan NIP, TANPA NIK */}
-                          {docData.bsreSignature.signerNip && (
-                            <span className="text-[10px] text-slate-300 block font-mono mt-1">
-                              NIP: {docData.bsreSignature.signerNip}
-                            </span>
-                          )}
-                        </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => downloadBsreRootCertificate()}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-200 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 border border-slate-700"
+                              title="Unduh Sertifikat Root CA BSSN"
+                            >
+                              <Download className="w-3.5 h-3.5 text-sky-400" />
+                              <span className="hidden sm:inline">Root CA (.crt)</span>
+                            </button>
 
-                        <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60 space-y-0.5">
-                          <span className="text-slate-400 block text-[11px] font-semibold">Otoritas Penerbit Sertifikat:</span>
-                          <span className="font-bold text-sky-300 block text-xs leading-snug">{docData.bsreSignature.issuerCa}</span>
-                          <span className="text-[10px] text-slate-400 block">Badan Siber dan Sandi Negara Republik Indonesia</span>
-                        </div>
-
-                        <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60 font-mono text-[11px]">
-                          <span className="text-slate-400 block font-sans text-[11px] font-semibold">Nomor Seri Sertifikat:</span>
-                          <span className="text-emerald-400 font-bold break-all mt-0.5 block">{docData.bsreSignature.certificateSerialNumber}</span>
-                          <span className="text-[10px] text-slate-400 font-sans block mt-0.5">Standar Kriptografi: SHA-256 with RSA (2048-bit)</span>
-                        </div>
-
-                        <div className="p-3.5 rounded-xl bg-slate-800/80 border border-slate-700/60">
-                          <span className="text-slate-400 block text-[11px] font-semibold">Integritas Dokumen:</span>
-                          <span className="text-emerald-400 font-bold flex items-center gap-1.5 mt-0.5">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                            Utuh & Belum Pernah Dimodifikasi
-                          </span>
-                          <span className="text-[10px] text-slate-400 block mt-0.5">
-                            Kekuatan Hukum: UU ITE No. 11/2008 & PP No. 71/2019
-                          </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowBsreModal(true)}
+                              className="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-md shadow-sky-600/30"
+                            >
+                              <Award className="w-3.5 h-3.5" />
+                              <span>Lihat Sertifikat X.509</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
-
-                      {/* Baris Timestamp & Tombol Sertifikat X.509 */}
-                      <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-sky-800/40">
-                        <div className="text-[11px] text-slate-300 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                          <span>Ditandatangani secara elektronik: <strong className="text-white">{formatDate(docData.bsreSignature.signatureTimestamp)}</strong></span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => downloadBsreRootCertificate()}
-                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-200 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 border border-slate-700"
-                            title="Unduh Sertifikat Root CA BSSN"
-                          >
-                            <Download className="w-3.5 h-3.5 text-sky-400" />
-                            <span className="hidden sm:inline">Root CA (.crt)</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setShowBsreModal(true)}
-                            className="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow-md shadow-sky-600/30"
-                          >
-                            <Award className="w-3.5 h-3.5" />
-                            <span>Lihat Sertifikat X.509</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Info Timestamp & Audit Scan */}
                   <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
@@ -633,11 +642,15 @@ export const ElectronicPublicVerify: React.FC<ElectronicPublicVerifyProps> = ({
       )}
 
       {/* Modal Sertifikat Digital BSrE */}
-      {docData?.bsreSignature && (
+      {docData && (
         <BsreCertificateModal
           isOpen={showBsreModal}
           onClose={() => setShowBsreModal(false)}
-          signatureInfo={docData.bsreSignature}
+          signatureInfo={
+            docData.bsreSignature && docData.bsreSignature.isSignedWithBsre
+              ? docData.bsreSignature
+              : ensureDocumentBsreSignature(docData).bsreSignature!
+          }
           documentName={docData.documentName}
           documentNumber={docData.documentNumber}
         />

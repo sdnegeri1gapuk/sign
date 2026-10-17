@@ -79,7 +79,7 @@ export function formatReadableDateTime(date: Date | string | number): string {
  * Tier 3: End-Entity Penandatangan Resmi (contoh: H. Masrun, S.Pd)
  */
 export function getOrCreateBsreCertificate(account: BsreAccount): BsrePkiHierarchy {
-  const cacheKey = account.nik || account.id;
+  const cacheKey = `${account.nik || account.id}_${account.namaLengkap}_${account.instansi || ''}`;
   if (certCache.has(cacheKey)) {
     return certCache.get(cacheKey)!;
   }

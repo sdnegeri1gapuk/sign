@@ -583,22 +583,22 @@ export const ElectronicCreateDoc: React.FC<ElectronicCreateDocProps> = ({
     try {
       const finalName = originalFileName.replace(/\.pdf$/i, '') + '_terverifikasi.pdf';
 
-      // BSrE Official Electronic Signature
+      // BSrE Official Electronic Signature (Wajib & Otomatis)
       const activeBsre = getActiveBsreAccount();
-      let bsreSignature: any = undefined;
-      if (isBsreAutoSignEnabled() && activeBsre && activeBsre.isLoggedIn) {
-        setExportProgressText(`Menandatangani dokumen dengan akun resmi BSrE (${activeBsre.namaLengkap})...`);
-        setExportPercent(30);
-        bsreSignature = await signDocumentWithBsre(
-          pdfBytes,
-          {
-            documentName: formData.documentName,
-            documentNumber: formData.documentNumber,
-            issuer: formData.issuer
-          },
-          activeBsre
-        );
-      }
+      const currentSignerName = (formData.signerName || '').trim() || activeBsre.namaLengkap;
+      setExportProgressText(`Menandatangani dokumen dengan akun resmi BSrE (${currentSignerName})...`);
+      setExportPercent(30);
+      const bsreSignature = await signDocumentWithBsre(
+        pdfBytes,
+        {
+          documentName: formData.documentName,
+          documentNumber: formData.documentNumber,
+          issuer: formData.issuer,
+          signerName: currentSignerName,
+          signerPosition: formData.signerPosition || activeBsre.jabatan
+        },
+        activeBsre
+      );
 
       let outputBytes: Uint8Array;
       if (selectedExportMode === 'original') {
